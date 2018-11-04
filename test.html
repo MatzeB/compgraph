@@ -1,0 +1,129 @@
+<html>
+  <head>
+    <script type="text/javascript" src="https://d3js.org/d3.v5.min.js"></script>
+    <style>
+      .node #back {
+        fill: red;
+        stroke: blue;
+        stroke-width: 2;
+      }
+      .node #title {
+        text-anchor: middle;
+        font: Helvetica;
+        font-size: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      class Output {
+        constructor(node) {
+          this.node = node;
+          this.successors = []
+        }
+      }
+      class Node {
+        constructor(text, inputs) {
+          this.text = text;
+          this.inputs = inputs;
+          this.users = [];
+          inputs.forEach(inp => {
+            inp.users.push(this);
+          });
+          this.level = 0;
+        }
+      }
+      function make_node(svg, node) {
+        const g = svg.append("g").attr("class", "node");
+
+        const text = g.append('text')
+          .attr("id", "title")
+          .attr("x", 50)
+          .attr("y", 50)
+          .text(node.text);
+        console.log(text);
+        const bbox = text.node().getBBox();
+        console.log(bbox);
+
+        const i_left = 5;
+        const i_right = 5;
+        const i_top = 5;
+        const i_bottom = 5;
+
+        const rect = g.append("rect")
+          .attr("id", "back")
+          .attr("x", bbox.x - i_left)
+          .attr("y", bbox.y - i_top)
+          .attr("width", bbox.width + i_left + i_right)
+          .attr("height", bbox.height + i_top + i_bottom)
+          .lower();
+
+        return g;
+      }
+
+      function walk_step(node, visited, pre_func, post_func) {
+        visited.add(node);
+        pre_func(node);
+        node.inputs.forEach(pred => {
+          if (visited.has(pred))
+            return;
+          walk_step(pred, visited, pre_func, post_func);
+        });
+        post_func(node);
+      }
+      function uwalk_step(node, visited, pre_func, post_func) {
+        visited.add(node);
+        pre_func(node);
+        node.users.forEach(succ => {
+          if (visited.has(succ))
+            return;
+          uwalk_step(succ, visited, pre_func, post_func);
+        });
+        post_func(node);
+      }
+
+      function walk(node, pre_func, post_func) {
+        const visited = new Set();
+        walk_step(node, visited, pre_func, post_func);
+      }
+      function walk_post_order(node, func) {
+        walk(node, n=>{}, func);
+      }
+      function walk_rpo(node, func) {
+        const list = [];
+        walk_post_order(node, n => {list.push(n);});
+        list.reverse().forEach(func);
+      }
+      function uwalk(node, pre_func, post_func) {
+        const visited = new Set();
+        uwalk_step(node, visited, pre_func, post_func);
+      }
+      function uwalk_rpo(node, func) {
+        const list = [];
+        uwalk(node, n=>{}, n=>{list.push(n);});
+        list.reverse().forEach(func);
+      }
+
+      const begin = new Node("Start", []);
+      const proj_args = new Node("Proj Args", [begin]);
+      const arg0 = new Node("Proj Arg 0", [proj_args]);
+      const arg1 = new Node("Proj Arg 1", [proj_args]);
+      const add = new Node("Add", [arg0, arg1]);
+      const ret = new Node("Return", [add]);
+
+      const svg = d3.select("body")
+        .append("svg")
+        .attr("width", 1000)
+        .attr("height", 800);
+      uwalk_rpo(begin, node => {
+        node.users.forEach(pred => {
+          pred.level = Math.max(pred.level, node.level+1);
+        });
+      });
+      walk_rpo(ret, node => {
+        console.log(node);
+        console.log(`Level: ${node.level}`);
+      });
+    </script>
+  </body>
+</html>
