@@ -1,20 +1,32 @@
-<html>
   <head>
     <script type="text/javascript" src="https://d3js.org/d3.v5.min.js"></script>
     <style>
       .node #back {
-        fill: red;
+        fill: grey;
         stroke: blue;
         stroke-width: 2;
       }
       .node #title {
-        text-anchor: middle;
+        text-anchor: start;
         font: Helvetica;
-        font-size: 30px;
+        font-size: 20px;
+      }
+      .edge {
+        stroke: black;
+        marker-end: url(#arrow);
+        fill: none;
       }
     </style>
   </head>
   <body>
+    <svg id="canvas" width="400" height="800" viewBox="-200 0 400 800">
+      <defs>
+        <marker id="arrow" refX="10" refY="5"
+                markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 L2.5,5 z"/>
+        </marker>
+      </defs>
+    </svg>
     <script>
       class Output {
         constructor(node) {
@@ -30,7 +42,7 @@
           inputs.forEach(inp => {
             inp.users.push(this);
           });
-          this.level = 0;
+          this.rank = 0;
         }
       }
       function make_node(svg, node) {
@@ -38,26 +50,25 @@
 
         const text = g.append('text')
           .attr("id", "title")
-          .attr("x", 50)
-          .attr("y", 50)
           .text(node.text);
-        console.log(text);
         const bbox = text.node().getBBox();
-        console.log(bbox);
 
-        const i_left = 5;
-        const i_right = 5;
+        const i_left = 10;
+        const i_right = 10;
         const i_top = 5;
         const i_bottom = 5;
 
         const rect = g.append("rect")
           .attr("id", "back")
-          .attr("x", bbox.x - i_left)
-          .attr("y", bbox.y - i_top)
-          .attr("width", bbox.width + i_left + i_right)
-          .attr("height", bbox.height + i_top + i_bottom)
+          .attr("width", i_left + bbox.width + i_right)
+          .attr("height", i_top + bbox.height + i_bottom)
           .lower();
+        text.attr("x", i_left);
+        text.attr("y", bbox.height);
 
+        node.g = g;
+        node.width = bbox.width + i_left + i_right;
+        node.height = bbox.height + i_top + i_bottom;
         return g;
       }
 
@@ -111,19 +122,96 @@
       const add = new Node("Add", [arg0, arg1]);
       const ret = new Node("Return", [add]);
 
-      const svg = d3.select("body")
-        .append("svg")
-        .attr("width", 1000)
-        .attr("height", 800);
       uwalk_rpo(begin, node => {
         node.users.forEach(pred => {
-          pred.level = Math.max(pred.level, node.level+1);
+          pred.rank = Math.max(pred.rank, node.rank+1);
         });
       });
-      walk_rpo(ret, node => {
-        console.log(node);
-        console.log(`Level: ${node.level}`);
+      const nodes = [];
+      walk_rpo(ret, n=>{nodes.push(n);});
+      nodes.forEach(node => {
+        console.log(`"${node.text}" rank: ${node.rank}`);
       });
+
+      function place(svg, nodes) {
+        var min_rank = 10000;
+        var max_rank = 0;
+        const ranks = new Map();
+        nodes.forEach(node => {
+          const rank = node.rank;
+          if (!ranks.has(rank))
+            ranks.set(rank, []);
+          ranks.get(rank).push(node);
+
+          min_rank = Math.min(min_rank, rank);
+          max_rank = Math.max(max_rank, rank);
+          make_node(svg, node);
+        });
+
+        const spacing_x = 25;
+        const spacing_y = 40;
+
+        var y = 0;
+        for (var i = min_rank; i <= max_rank; i++) {
+          if (y != 0)
+            y += spacing_y;
+
+          const rank_nodes = ranks.get(i).reverse();
+          if (rank_nodes.length == 0)
+            continue;
+          var x = 0;
+          var height = 0;
+          rank_nodes.forEach(node => {
+            if (x > 0)
+              x += spacing_x;
+            node.x = x;
+            node.y = y;
+            x += node.width;
+
+            height = Math.max(height, node.height);
+          });
+          const offset = x / 2.;
+          rank_nodes.forEach(node => {
+            node.x -= offset;
+          });
+
+          y += height;
+        }
+
+        nodes.forEach(node => {
+          console.log(node);
+          node.g.attr("transform", `translate(${node.x} ${node.y})`);
+        });
+      }
+
+      function draw_vertices(svg, nodes) {
+        nodes.forEach(node => {
+          const in_y = node.y;
+
+          const spacing_in_x = node.width / (node.inputs.length + 1);
+          var in_x = node.x;
+          node.inputs.forEach(inp => {
+            in_x += spacing_in_x;
+            const out_x = inp.x + (inp.width / 2);
+            const out_y = inp.y + inp.height;
+            const half_y = (in_y + out_y) / 2;
+
+            path = `M${in_x},${in_y}`;
+            if (in_x != out_x) {
+              path += `V${half_y}`;
+              path += `H${out_x}`;
+            }
+            path += `V${out_y}`;
+            svg.append("path")
+              .attr("d", path)
+              .attr("class", "edge");
+          });
+        });
+      }
+
+      const svg = d3.select("#canvas");
+      place(svg, nodes);
+      draw_vertices(svg, nodes);
     </script>
   </body>
 </html>
