@@ -1,0 +1,136 @@
+<html>
+  <head>
+    <script type="text/javascript" src="layout.js"></script>
+    <style>
+      .back {
+        fill: #b2dfee;
+        stroke: none;
+      }
+      g text {
+        text-anchor: start;
+        font-family: Verdana, Arial, sans-serif;
+        font-size: 12px;
+        fill: black;
+      }
+      .edges {
+        stroke: black;
+        marker-end: url(#arrow);
+        fill: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- imported layout.svg here (is there a better way?) -->
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="0" height="0">
+      <defs>
+        <marker id="arrow" refX="10" refY="5"
+                markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 L2.5,5 z"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <svg width="1000" height="1600" viewBox="-500 0 1000 1600" id="canvas">
+      <g class="layout">
+        <text id="5th">5th Edition</text>
+        <text id="6th">6th Edition</text>
+        <text id="7th">7th Edition</text>
+        <text id="8th">8th Edition</text>
+        <text id="9th">9th Edition</text>
+        <text id="pwb1">PWB 1.0</text>
+        <text id="pwb12">PWB 1.2</text>
+        <text id="pwb2">PWB 2.0</text>
+        <text id="usg1">USG 1.0</text>
+        <text id="usg2">USG 2.0</text>
+        <text id="usg3">USG 3.0</text>
+        <text id="cbu1">CB Unix 1</text>
+        <text id="cbu2">CB Unix 2</text>
+        <text id="cbu3">CB Unix 3</text>
+        <text id="lsx">LSX</text>
+        <text id="minu">Mini Unix</text>
+        <text id="woll">Wollongong</text>
+        <text id="inter">Interdata</text>
+        <text id="1bsd">1 BSD</text>
+        <text id="2bsd">2 BSD</text>
+        <text id="28bsd">2.8 BSD</text>
+        <text id="29bsd">2.9 BSD</text>
+        <text id="3bsd">3 BSD</text>
+        <text id="4bsd">4 BSD</text>
+        <text id="41bsd">4.1 BSD</text>
+        <text id="42bsd">4.2 BSD</text>
+        <text id="43bsd">4.3 BSD</text>
+        <text id="ts1">Unix/TS 1.0</text>
+        <text id="ts+">Unix/TS++</text>
+        <text id="ts3">Unix/TS 3.0</text>
+        <text id="ts4">TS 4.0</text>
+        <text id="sys0">System V.0</text>
+        <text id="sys2">System V.2</text>
+        <text id="sys3">System V.3</text>
+        <text id="pdp5">PDP-11 Sys V</text>
+        <text id="32v">32V</text>
+        <text id="v7m">V7M</text>
+        <text id="ultrix">Ultrix-11</text>
+        <text id="ultrix32">Ultrix-32</text>
+        <text id="xenix">Xenix</text>
+        <text id="uniplus">UniPlus+</text>
+
+        <edge src="5th" dst="6th"/>
+        <edge src="5th" dst="pwb1"/>
+        <edge src="6th" dst="lsx"/>
+        <edge src="6th" dst="1bsd"/>
+        <edge src="6th" dst="minu"/>
+        <edge src="6th" dst="woll"/>
+        <edge src="6th" dst="inter"/>
+        <edge src="inter" dst="ts3"/>
+        <edge src="inter" dst="pwb2"/>
+        <edge src="inter" dst="7th"/>
+        <edge src="7th" dst="8th"/>
+        <edge src="7th" dst="32v"/>
+        <edge src="7th" dst="v7m"/>
+        <edge src="7th" dst="ultrix"/>
+        <edge src="7th" dst="xenix"/>
+        <edge src="7th" dst="uniplus"/>
+        <edge src="v7m" dst="ultrix"/>
+        <edge src="8th" dst="9th"/>
+        <edge src="1bsd" dst="2bsd"/>
+        <edge src="2bsd" dst="28bsd"/>
+        <edge src="28bsd" dst="ultrix"/>
+        <edge src="28bsd" dst="29bsd"/>
+        <edge src="32v" dst="3bsd"/>
+        <edge src="3bsd" dst="4bsd"/>
+        <edge src="4bsd" dst="41bsd"/>
+        <edge src="41bsd" dst="42bsd"/>
+        <edge src="41bsd" dst="28bsd"/>
+        <edge src="41bsd" dst="8th"/>
+        <edge src="42bsd" dst="43bsd"/>
+        <edge src="42bsd" dst="ultrix32"/>
+        <edge src="pwb1" dst="pwb12"/>
+        <edge src="pwb1" dst="usg1"/>
+        <edge src="pwb12" dst="pwb2"/>
+        <edge src="usg1" dst="cbu1"/>
+        <edge src="usg1" dst="usg2"/>
+        <edge src="cbu1" dst="cbu2"/>
+        <edge src="cbu2" dst="cbu3"/>
+        <edge src="cbu3" dst="ts+"/>
+        <edge src="cbu3" dst="pdp5"/>
+        <edge src="usg2" dst="usg3"/>
+        <edge src="usg3" dst="ts3"/>
+        <edge src="pwb2" dst="ts3"/>
+        <edge src="ts1" dst="ts3"/>
+        <edge src="ts3" dst="ts4"/>
+        <edge src="ts+" dst="ts4"/>
+        <edge src="cbu3" dst="ts4"/>
+        <edge src="ts4" dst="sys0"/>
+        <edge src="sys0" dst="sys2"/>
+        <edge src="sys2" dst="sys3"/>
+      </g>
+    </svg>
+
+    <script>
+      document.querySelectorAll('svg .layout text').forEach(make_ellipse);
+      document.querySelectorAll('svg .layout').forEach(svg => {
+        layout(svg, true);
+      });
+    </script>
+  </body>
+</html>

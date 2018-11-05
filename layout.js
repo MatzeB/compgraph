@@ -1,33 +1,62 @@
-function make_boxes(root) {
-  root.querySelectorAll('.boxed').forEach(n => {
-    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+function make_box(node) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    g.appendChild(rect);
-    for (let i = n.attributes.length - 1; i >= 0; i--) {
-      const attrib = n.attributes[i];
-      if (attrib.name == "id" || attrib.name == "class") {
-        g.setAttribute(attrib.name, attrib.value);
-        n.removeAttribute(attrib.name);
-      } else {
-        rect.setAttribute(attrib.name, attrib.value);
-      }
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  g.appendChild(rect);
+  for (let i = node.attributes.length - 1; i >= 0; i--) {
+    const attrib = node.attributes[i];
+    if (attrib.name == "id" || attrib.name == "class") {
+      g.setAttribute(attrib.name, attrib.value);
+      node.removeAttribute(attrib.name);
+    } else {
+      rect.setAttribute(attrib.name, attrib.value);
     }
-    n.replaceWith(g);
-    g.appendChild(n);
+  }
+  node.replaceWith(g);
+  g.appendChild(node);
 
-    const i_left = 10;
-    const i_right = 10;
-    const i_top = 5;
-    const i_bottom = 5;
+  const i_left = 10;
+  const i_right = 10;
+  const i_top = 5;
+  const i_bottom = 5;
 
-    const bbox = g.getBBox();
-    rect.setAttribute("class", "back");
-    rect.setAttribute("x", bbox.x - i_left);
-    rect.setAttribute("y", bbox.y - i_top);
-    rect.setAttribute("width", bbox.width + i_left + i_right);
-    rect.setAttribute("height", bbox.height + i_top + i_bottom);
-  });
+  const bbox = g.getBBox();
+  rect.setAttribute("class", "back");
+  rect.setAttribute("x", bbox.x - i_left);
+  rect.setAttribute("y", bbox.y - i_top);
+  rect.setAttribute("width", bbox.width + i_left + i_right);
+  rect.setAttribute("height", bbox.height + i_top + i_bottom);
+}
+
+function make_ellipse(node) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+  const ellipse = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+  g.appendChild(ellipse);
+  for (let i = node.attributes.length - 1; i >= 0; i--) {
+    const attrib = node.attributes[i];
+    if (attrib.name == "id" || attrib.name == "class") {
+      g.setAttribute(attrib.name, attrib.value);
+      node.removeAttribute(attrib.name);
+    } else {
+      ellipse.setAttribute(attrib.name, attrib.value);
+    }
+  }
+  node.replaceWith(g);
+  g.appendChild(node);
+
+  const add_rx = 5;
+  const add_ry = 5;
+
+  const bbox = g.getBBox();
+  const inv_sqr2 = 1 / Math.sqrt(2);
+  const rx = bbox.width * inv_sqr2 + add_rx;
+  const ry = bbox.height * inv_sqr2 + add_ry;
+  ellipse.setAttribute("class", "back");
+  ellipse.setAttribute("cx", bbox.x + (bbox.width / 2));
+  ellipse.setAttribute("cy", bbox.y + (bbox.height / 2));
+  ellipse.setAttribute("rx", rx);
+  ellipse.setAttribute("ry", ry);
 }
 
 class Edge {
@@ -46,12 +75,12 @@ class Vertex {
     this.refX = -bbox.x;
     this.refY = -bbox.y;
     this.rank = 0;
-    this.inputs = [];
-    this.users = [];
+    this.out_edges = [];
+    this.in_vertices = [];
   }
 }
 
-function make_vertices(element) {
+function make_vertices(element, flip) {
   const vertices = new Map();
   // Create vertices.
   for (let i = 0; i < element.children.length; i++) {
@@ -77,9 +106,9 @@ function make_vertices(element) {
       console.log(`Destination vertex "${dst}" not found`);
       continue;
     }
-    const src_node = vertices.get(src);
-    const dst_node = vertices.get(dst);
-    dst_node.users.push(src_node);
+    const src_node = vertices.get(flip ? dst : src);
+    const dst_node = vertices.get(flip ? src : dst);
+    dst_node.in_vertices.push(src_node);
 
     const edge = new Edge(dst_node);
     const input_attributes = new Map();
@@ -89,12 +118,12 @@ function make_vertices(element) {
         continue;
       edge.attributes.set(attrib.name, attrib.value);
     }
-    src_node.inputs.push(edge);
+    src_node.out_edges.push(edge);
   }
   // Determine roots.
   const roots = [];
   for (let v of vertices.values()) {
-    if (v.inputs.length == 0)
+    if (v.out_edges.length == 0)
       roots.push(v);
   }
   return roots;
@@ -105,7 +134,7 @@ function walk_step(node, visited, pre_func, post_func) {
     return;
   visited.add(node);
   pre_func(node);
-  node.inputs.forEach(pred => {
+  node.out_edges.forEach(pred => {
     walk_step(pred.dest, visited, pre_func, post_func);
   });
   post_func(node);
@@ -115,7 +144,7 @@ function uwalk_step(node, visited, pre_func, post_func) {
     return;
   visited.add(node);
   pre_func(node);
-  node.users.forEach(succ => {
+  node.in_vertices.forEach(succ => {
     uwalk_step(succ, visited, pre_func, post_func);
   });
   post_func(node);
@@ -151,7 +180,7 @@ function rank(roots) {
   const nodes = [];
   uwalk_rpo(roots, node => {
     nodes.push(node);
-    node.users.forEach(pred => {
+    node.in_vertices.forEach(pred => {
       pred.rank = Math.max(pred.rank, node.rank+1);
     });
   });
@@ -219,9 +248,9 @@ function create_edge_elements(nodes) {
   nodes.forEach(node => {
     const in_y = node.y;
 
-    const spacing_in_x = node.width / (node.inputs.length + 1);
+    const spacing_in_x = node.width / (node.out_edges.length + 1);
     var in_x = node.x;
-    node.inputs.forEach(edge => {
+    node.out_edges.forEach(edge => {
       const dest = edge.dest;
       in_x += spacing_in_x;
       const out_x = dest.x + (dest.width / 2);
@@ -245,9 +274,8 @@ function create_edge_elements(nodes) {
   return edges_g;
 }
 
-function layout(element) {
-  make_boxes(element);
-  const roots = make_vertices(element);
+function layout(element, flip=false) {
+  const roots = make_vertices(element, flip);
   const nodes = place(roots);
   const edges_g = create_edge_elements(nodes);
   element.appendChild(edges_g);
