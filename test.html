@@ -8,10 +8,10 @@
       }
       .node #title {
         text-anchor: start;
-        font: Helvetica;
-        font-size: 20px;
+        font-family: Verdana, Arial, sans-serif;
+        font-size: 18px;
       }
-      .edge {
+      .edges {
         stroke: black;
         marker-end: url(#arrow);
         fill: none;
@@ -19,7 +19,7 @@
     </style>
   </head>
   <body>
-    <svg id="canvas" width="400" height="800" viewBox="-200 0 400 800">
+    <svg width="0" height="0">
       <defs>
         <marker id="arrow" refX="10" refY="5"
                 markerWidth="10" markerHeight="10" orient="auto-start-reverse">
@@ -27,13 +27,13 @@
         </marker>
       </defs>
     </svg>
+    <svg id="canvas" width="400" height="800" viewBox="-200 0 400 800">
+      <g class="node">
+        <text id="title" x="10" y="21.65625">Return</text>
+        <rect id="back" width="80.78125" height="31.65625"></rect>
+      </g>
+    </svg>
     <script>
-      class Output {
-        constructor(node) {
-          this.node = node;
-          this.successors = []
-        }
-      }
       class Node {
         constructor(text, inputs) {
           this.text = text;
@@ -185,6 +185,7 @@
       }
 
       function draw_vertices(svg, nodes) {
+        const edges_g = svg.append("g").attr("class", "edges");
         nodes.forEach(node => {
           const in_y = node.y;
 
@@ -202,9 +203,7 @@
               path += `H${out_x}`;
             }
             path += `V${out_y}`;
-            svg.append("path")
-              .attr("d", path)
-              .attr("class", "edge");
+            edges_g.append("path").attr("d", path);
           });
         });
       }
