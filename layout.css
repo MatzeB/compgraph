@@ -1,0 +1,16 @@
+.boxed rect {
+  fill: grey;
+  stroke: blue;
+  stroke-width: 2;
+}
+.boxed text {
+  text-anchor: start;
+  font-family: Verdana, Arial, sans-serif;
+  font-size: 18px;
+  fill: black;
+}
+.edges {
+  stroke: black;
+  marker-end: url(#arrow);
+  fill: none;
+}
