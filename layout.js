@@ -67,17 +67,25 @@ class Edge {
 }
 
 class Vertex {
-  constructor(element) {
+  constructor(element, width, height, refX, refY) {
     this.element = element;
-    const bbox = element.getBBox();
-    this.width = bbox.width;
-    this.height = bbox.height;
-    this.refX = -bbox.x;
-    this.refY = -bbox.y;
+    this.width = width;
+    this.height = height;
+    this.refX = refX;
+    this.refY = refY;
     this.rank = 0;
     this.out_edges = [];
     this.in_vertices = [];
   }
+}
+
+function make_vertex(element) {
+  const bbox = element.getBBox();
+  return new Vertex(element, bbox.width, bbox.height, -bbox.x, -bbox.y);
+}
+
+function make_pseudo_vertex(rank, final_dest) {
+  return new Vertex(null, 10, 1, 0, 0);
 }
 
 function make_vertices(element, flip) {
@@ -86,7 +94,8 @@ function make_vertices(element, flip) {
   for (let i = 0; i < element.children.length; i++) {
     const child = element.children[i];
     if (child.nodeName != "edge" && child.hasAttribute("id")) {
-      vertices.set(child.getAttribute("id"), new Vertex(child));
+      const vertex = make_vertex(child);
+      vertices.set(child.getAttribute("id"), vertex);
     }
   }
   // Create edges.
@@ -134,9 +143,9 @@ function walk_step(node, visited, pre_func, post_func) {
     return;
   visited.add(node);
   pre_func(node);
-  node.out_edges.forEach(pred => {
-    walk_step(pred.dest, visited, pre_func, post_func);
-  });
+  for (let edge of node.out_edges) {
+    walk_step(edge.dest, visited, pre_func, post_func);
+  }
   post_func(node);
 }
 function uwalk_step(node, visited, pre_func, post_func) {
@@ -144,17 +153,17 @@ function uwalk_step(node, visited, pre_func, post_func) {
     return;
   visited.add(node);
   pre_func(node);
-  node.in_vertices.forEach(succ => {
+  for (let succ of node.in_vertices) {
     uwalk_step(succ, visited, pre_func, post_func);
-  });
+  }
   post_func(node);
 }
 
 function walk(roots, pre_func, post_func) {
   const visited = new Set();
-  roots.forEach(node => {
+  for (let node of roots) {
     walk_step(node, visited, pre_func, post_func);
-  });
+  }
 }
 function walk_post_order(roots, func) {
   walk(roots, n=>{}, func);
@@ -166,56 +175,107 @@ function walk_rpo(roots, func) {
 }
 function uwalk(roots, pre_func, post_func) {
   const visited = new Set();
-  roots.forEach(node => {
+  for (let node of roots) {
     uwalk_step(node, visited, pre_func, post_func);
-  });
+  }
+}
+function uwalk_post_order(roots, func) {
+  uwalk(roots, n=>{}, func);
 }
 function uwalk_rpo(roots, func) {
   const list = [];
-  uwalk(roots, n=>{}, n=>{list.push(n);});
+  uwalk_post_order(roots, n=>{list.push(n);});
   list.reverse().forEach(func);
 }
 
-function rank(roots) {
-  const nodes = [];
-  uwalk_rpo(roots, node => {
-    nodes.push(node);
-    node.in_vertices.forEach(pred => {
-      pred.rank = Math.max(pred.rank, node.rank+1);
-    });
-  });
-  return nodes;
+class Ranking {
+  constructor(ranks, min_rank, max_rank) {
+    this.ranks = ranks;
+    this.min_rank = min_rank;
+    this.max_rank = max_rank;
+  }
 }
 
-function place(roots) {
-  const nodes = rank(roots);
+function rank(roots) {
+  uwalk_rpo(roots, node => {
+    for (let pred of node.in_vertices) {
+      pred.rank = Math.max(pred.rank, node.rank+1);
+    }
+  });
 
-  var min_rank = 10000;
-  var max_rank = 0;
+  let min_rank = 10000;
+  let max_rank = 0;
   const ranks = new Map();
-  nodes.forEach(node => {
+  uwalk_post_order(roots, node => {
     const rank = node.rank;
     if (!ranks.has(rank))
       ranks.set(rank, []);
     ranks.get(rank).push(node);
 
+    // Create pseudo nodes for connecting ranks
+    //for (let edge of node.out_edges) {
+    //  const dest = egde.dest;
+    //  const dest_rank = dest.rank;
+    //  while (dest_rank < rank-1) {
+    //  }
+    //}
+
     min_rank = Math.min(min_rank, rank);
     max_rank = Math.max(max_rank, rank);
   });
 
+  return new Ranking(ranks, min_rank, max_rank);
+}
+
+function order(ranking) {
+  const ranks = ranking.ranks;
+  const min_rank = ranking.min_rank;
+  const max_rank = ranking.max_rank;
+
+  for (let rank = min_rank; rank <= max_rank; rank++) {
+    const rank_nodes = ranks.get(rank);
+    if (rank > min_rank) {
+      for (let node of rank_nodes) {
+        let preliminary_idx = -1;
+        for (let edge of node.out_edges) {
+          const dest = edge.dest;
+          if (dest.rank == undefined || dest.rank != (rank-1))
+            continue;
+          if (dest.order_idx != undefined) {
+            preliminary_idx = dest.order_idx;
+            break;
+          }
+        }
+        node.order_idx = preliminary_idx;
+      }
+      rank_nodes.sort((n0, n1) => (n1.order_idx - n0.order_idx));
+    }
+
+    let idx = 0;
+    for (let node of rank_nodes) {
+      node.order_idx = idx++;
+    }
+  }
+}
+
+function place(ranking) {
+  const ranks = ranking.ranks;
+  const min_rank = ranking.min_rank;
+  const max_rank = ranking.max_rank;
+
   const spacing_x = 25;
   const spacing_y = 40;
 
-  var y = 0;
-  for (var i = min_rank; i <= max_rank; i++) {
+  let y = 0;
+  for (let i = min_rank; i <= max_rank; i++) {
     if (y != 0)
       y += spacing_y;
 
-    const rank_nodes = ranks.get(i).reverse();
+    const rank_nodes = ranks.get(i).slice().reverse();
     if (rank_nodes.length == 0)
       continue;
-    var x = 0;
-    var height = 0;
+    let x = 0;
+    let height = 0;
     rank_nodes.forEach(node => {
       if (x > 0)
         x += spacing_x;
@@ -228,28 +288,27 @@ function place(roots) {
     const offset = x / 2.;
     rank_nodes.forEach(node => {
       node.x -= offset;
+
+      const x = node.x + node.refX;
+      const y = node.y + node.refY;
+      node.element.setAttribute("transform", `translate(${x} ${y})`);
     });
 
     y += height;
   }
-
-  nodes.forEach(node => {
-    const x = node.x + node.refX;
-    const y = node.y + node.refY;
-    node.element.setAttribute("transform", `translate(${x} ${y})`);
-  });
-
-  return nodes;
 }
 
-function create_edge_elements(nodes) {
+function draw_edges(roots) {
+  const nodes = [];
+  uwalk_post_order(roots, n=>{nodes.push(n);});
+
   const edges_g = document.createElementNS("http://www.w3.org/2000/svg", "g");
   edges_g.setAttribute("class", "edges");
   nodes.forEach(node => {
     const in_y = node.y;
 
     const spacing_in_x = node.width / (node.out_edges.length + 1);
-    var in_x = node.x;
+    let in_x = node.x;
     node.out_edges.forEach(edge => {
       const dest = edge.dest;
       in_x += spacing_in_x;
@@ -276,7 +335,10 @@ function create_edge_elements(nodes) {
 
 function layout(element, flip=false) {
   const roots = make_vertices(element, flip);
-  const nodes = place(roots);
-  const edges_g = create_edge_elements(nodes);
+  const ranking = rank(roots);
+  order(ranking);
+  place(ranking);
+
+  const edges_g = draw_edges(roots);
   element.appendChild(edges_g);
 }
