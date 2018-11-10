@@ -60,7 +60,8 @@ function make_ellipse(node) {
 }
 
 class Edge {
-  constructor(dest) {
+  constructor(source, dest) {
+    this.source = source;
     this.dest = dest;
     this.attributes = new Map();
   }
@@ -75,7 +76,7 @@ class Vertex {
     this.refY = refY;
     this.rank = 0;
     this.out_edges = [];
-    this.in_vertices = [];
+    this.in_edges = [];
   }
 }
 
@@ -88,7 +89,7 @@ function make_pseudo_vertex(rank, final_dest) {
   return new Vertex(null, 10, 1, 0, 0);
 }
 
-function make_vertices(element, flip) {
+function make_vertices(element) {
   const vertices = new Map();
   // Create vertices.
   for (let i = 0; i < element.children.length; i++) {
@@ -115,11 +116,10 @@ function make_vertices(element, flip) {
       console.log(`Destination vertex "${dst}" not found`);
       continue;
     }
-    const src_node = vertices.get(flip ? dst : src);
-    const dst_node = vertices.get(flip ? src : dst);
-    dst_node.in_vertices.push(src_node);
+    const src_node = vertices.get(src);
+    const dst_node = vertices.get(dst);
 
-    const edge = new Edge(dst_node);
+    const edge = new Edge(src_node, dst_node);
     const input_attributes = new Map();
     for (let i = child.attributes.length - 1; i >= 0; i--) {
       const attrib = child.attributes[i];
@@ -128,11 +128,12 @@ function make_vertices(element, flip) {
       edge.attributes.set(attrib.name, attrib.value);
     }
     src_node.out_edges.push(edge);
+    dst_node.in_edges.push(edge);
   }
   // Determine roots.
   const roots = [];
   for (let v of vertices.values()) {
-    if (v.out_edges.length == 0)
+    if (v.in_edges.length == 0)
       roots.push(v);
   }
   return roots;
@@ -148,13 +149,13 @@ function walk_step(node, visited, pre_func, post_func) {
   }
   post_func(node);
 }
-function uwalk_step(node, visited, pre_func, post_func) {
+function rwalk_step(node, visited, pre_func, post_func) {
   if (visited.has(node))
     return;
   visited.add(node);
   pre_func(node);
-  for (let succ of node.in_vertices) {
-    uwalk_step(succ, visited, pre_func, post_func);
+  for (let edge of node.in_edges) {
+    rwalk_step(edge.source, visited, pre_func, post_func);
   }
   post_func(node);
 }
@@ -173,18 +174,18 @@ function walk_rpo(roots, func) {
   walk_post_order(roots, n => {list.push(n);});
   list.reverse().forEach(func);
 }
-function uwalk(roots, pre_func, post_func) {
+function rwalk(roots, pre_func, post_func) {
   const visited = new Set();
   for (let node of roots) {
-    uwalk_step(node, visited, pre_func, post_func);
+    rwalk_step(node, visited, pre_func, post_func);
   }
 }
-function uwalk_post_order(roots, func) {
-  uwalk(roots, n=>{}, func);
+function rwalk_post_order(roots, func) {
+  rwalk(roots, n=>{}, func);
 }
-function uwalk_rpo(roots, func) {
+function rwalk_rpo(roots, func) {
   const list = [];
-  uwalk_post_order(roots, n=>{list.push(n);});
+  rwalk_post_order(roots, n=>{list.push(n);});
   list.reverse().forEach(func);
 }
 
@@ -197,16 +198,17 @@ class Ranking {
 }
 
 function rank(roots) {
-  uwalk_rpo(roots, node => {
-    for (let pred of node.in_vertices) {
-      pred.rank = Math.max(pred.rank, node.rank+1);
+  walk_rpo(roots, node => {
+    for (let edge of node.out_edges) {
+      const succ = edge.dest;
+      succ.rank = Math.max(succ.rank, node.rank+1);
     }
   });
 
   let min_rank = 10000;
   let max_rank = 0;
   const ranks = new Map();
-  uwalk_post_order(roots, node => {
+  walk_post_order(roots, node => {
     const rank = node.rank;
     if (!ranks.has(rank))
       ranks.set(rank, []);
@@ -300,28 +302,28 @@ function place(ranking) {
 
 function draw_edges(roots) {
   const nodes = [];
-  uwalk_post_order(roots, n=>{nodes.push(n);});
+  walk_post_order(roots, n=>{nodes.push(n);});
 
   const edges_g = document.createElementNS("http://www.w3.org/2000/svg", "g");
   edges_g.setAttribute("class", "edges");
   nodes.forEach(node => {
-    const in_y = node.y;
+    const out_y = node.y + node.height;
 
-    const spacing_in_x = node.width / (node.out_edges.length + 1);
-    let in_x = node.x;
+    const spacing_out_x = node.width / (node.out_edges.length + 1);
+    let out_x = node.x;
     node.out_edges.forEach(edge => {
       const dest = edge.dest;
-      in_x += spacing_in_x;
-      const out_x = dest.x + (dest.width / 2);
-      const out_y = dest.y + dest.height;
-      const half_y = (in_y + out_y) / 2;
+      out_x += spacing_out_x;
+      const in_x = dest.x + (dest.width / 2);
+      const in_y = dest.y;
+      const half_y = (out_y + in_y) / 2;
 
-      let path_data = `M${in_x},${in_y}`;
-      if (in_x != out_x) {
+      let path_data = `M${out_x},${out_y}`;
+      if (out_x != in_x) {
         path_data += `V${half_y}`;
-        path_data += `H${out_x}`;
+        path_data += `H${in_x}`;
       }
-      path_data += `V${out_y}`;
+      path_data += `V${in_y}`;
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       edge.attributes.forEach((value, name) => {
         path.setAttribute(name, value);
@@ -333,8 +335,8 @@ function draw_edges(roots) {
   return edges_g;
 }
 
-function layout(element, flip=false) {
-  const roots = make_vertices(element, flip);
+function layout(element) {
+  const roots = make_vertices(element);
   const ranking = rank(roots);
   order(ranking);
   place(ranking);
