@@ -1,7 +1,6 @@
 <html>
   <head>
     <link rel="stylesheet" type="text/css" href="layout.css">
-    <script type="text/javascript" src="layout.js"></script>
   </head>
   <body>
     <!-- imported layout.svg here (is there a better way?) -->
@@ -33,6 +32,9 @@
       </g>
     </svg>
     <script>
+      import { make_box } from './drawing.mjs';
+      import { layout } from './layout.mjs';
+
       document.querySelectorAll('.boxed').forEach(make_box);
       document.querySelectorAll('svg .layout').forEach(layout);
     </script>

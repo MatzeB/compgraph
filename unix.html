@@ -1,6 +1,6 @@
 <html>
   <head>
-    <script type="text/javascript" src="layout.js"></script>
+    <meta charset="utf-8"/>
     <style>
       .back {
         fill: #b2dfee;
@@ -126,7 +126,10 @@
       </g>
     </svg>
 
-    <script>
+    <script type="module">
+      import { make_ellipse } from './drawing.mjs';
+      import { layout } from './layout.mjs';
+        
       document.querySelectorAll('svg .layout text').forEach(make_ellipse);
       document.querySelectorAll('svg .layout').forEach(svg => {
         layout(svg);

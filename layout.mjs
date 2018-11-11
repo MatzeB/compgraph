@@ -1,63 +1,4 @@
-function make_box(node) {
-  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-
-  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  g.appendChild(rect);
-  for (let i = node.attributes.length - 1; i >= 0; i--) {
-    const attrib = node.attributes[i];
-    if (attrib.name == "id" || attrib.name == "class") {
-      g.setAttribute(attrib.name, attrib.value);
-      node.removeAttribute(attrib.name);
-    } else {
-      rect.setAttribute(attrib.name, attrib.value);
-    }
-  }
-  node.replaceWith(g);
-  g.appendChild(node);
-
-  const i_left = 10;
-  const i_right = 10;
-  const i_top = 5;
-  const i_bottom = 5;
-
-  const bbox = g.getBBox();
-  rect.setAttribute("class", "back");
-  rect.setAttribute("x", bbox.x - i_left);
-  rect.setAttribute("y", bbox.y - i_top);
-  rect.setAttribute("width", bbox.width + i_left + i_right);
-  rect.setAttribute("height", bbox.height + i_top + i_bottom);
-}
-
-function make_ellipse(node) {
-  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-
-  const ellipse = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-  g.appendChild(ellipse);
-  for (let i = node.attributes.length - 1; i >= 0; i--) {
-    const attrib = node.attributes[i];
-    if (attrib.name == "id" || attrib.name == "class") {
-      g.setAttribute(attrib.name, attrib.value);
-      node.removeAttribute(attrib.name);
-    } else {
-      ellipse.setAttribute(attrib.name, attrib.value);
-    }
-  }
-  node.replaceWith(g);
-  g.appendChild(node);
-
-  const add_rx = 5;
-  const add_ry = 5;
-
-  const bbox = g.getBBox();
-  const inv_sqr2 = 1 / Math.sqrt(2);
-  const rx = bbox.width * inv_sqr2 + add_rx;
-  const ry = bbox.height * inv_sqr2 + add_ry;
-  ellipse.setAttribute("class", "back");
-  ellipse.setAttribute("cx", bbox.x + (bbox.width / 2));
-  ellipse.setAttribute("cy", bbox.y + (bbox.height / 2));
-  ellipse.setAttribute("rx", rx);
-  ellipse.setAttribute("ry", ry);
-}
+const SVGNS = "http://www.w3.org/2000/svg";
 
 class Edge {
   constructor(source, dest) {
@@ -85,8 +26,11 @@ function make_vertex(element) {
   return new Vertex(element, bbox.width, bbox.height, -bbox.x, -bbox.y);
 }
 
-function make_pseudo_vertex(rank, final_dest) {
-  return new Vertex(null, 10, 1, 0, 0);
+function make_pseudo_vertex(rank, edge) {
+  const v = new Vertex(null, 1, 1, 0, 0);
+  v.rank = rank;
+  v.edge = edge;
+  return v;
 }
 
 function make_vertices(element) {
@@ -190,10 +134,10 @@ function rwalk_rpo(roots, func) {
 }
 
 class Ranking {
-  constructor(ranks, min_rank, max_rank) {
+  constructor(ranks, max_rank, nodelist) {
     this.ranks = ranks;
-    this.min_rank = min_rank;
     this.max_rank = max_rank;
+    this.nodelist = nodelist;
   }
 }
 
@@ -208,6 +152,7 @@ function rank(roots) {
   let min_rank = 10000;
   let max_rank = 0;
   const ranks = new Map();
+  const nodelist = [];
   walk_post_order(roots, node => {
     const rank = node.rank;
     if (!ranks.has(rank))
@@ -215,28 +160,52 @@ function rank(roots) {
     ranks.get(rank).push(node);
 
     // Create pseudo nodes for connecting ranks
-    //for (let edge of node.out_edges) {
-    //  const dest = egde.dest;
-    //  const dest_rank = dest.rank;
-    //  while (dest_rank < rank-1) {
-    //  }
-    //}
+    const new_edges = [];
+    for (let edge of node.out_edges) {
+      const dest = edge.dest;
+      const dest_rank = dest.rank;
+      let last = node;
+      for (let r = rank+1; r < dest_rank; ++r) {
+        const v = make_pseudo_vertex(r, edge);
+        if (!ranks.has(r))
+          ranks.set(r, []);
+        ranks.get(r).push(v);
+        nodelist.push(v);
+        const e = new Edge(last, v);
+        v.in_edges = e;
+        if (last === node) {
+          new_edges.push(e);
+        } else {
+          last.out_edges.push(e);
+        }
+        last = v;
+      }
+      if (last === node) {
+        new_edges.push(edge);
+      } else {
+        const e = new Edge(last, dest);
+        dest.in_edges.push(e);
+        last.out_edges.push(e);
+      }
+    }
+    node.out_edges = new_edges;
 
     min_rank = Math.min(min_rank, rank);
     max_rank = Math.max(max_rank, rank);
+    nodelist.push(node);
   });
+  console.assert(min_rank == 0);
 
-  return new Ranking(ranks, min_rank, max_rank);
+  return new Ranking(ranks, max_rank, nodelist);
 }
 
 function order(ranking) {
   const ranks = ranking.ranks;
-  const min_rank = ranking.min_rank;
   const max_rank = ranking.max_rank;
 
-  for (let rank = min_rank; rank <= max_rank; rank++) {
+  for (let rank = 0; rank <= max_rank; rank++) {
     const rank_nodes = ranks.get(rank);
-    if (rank > min_rank) {
+    if (rank > 0) {
       for (let node of rank_nodes) {
         let preliminary_idx = -1;
         for (let edge of node.out_edges) {
@@ -260,16 +229,9 @@ function order(ranking) {
   }
 }
 
-function place(ranking) {
-  const ranks = ranking.ranks;
-  const min_rank = ranking.min_rank;
-  const max_rank = ranking.max_rank;
-
-  const spacing_x = 25;
-  const spacing_y = 40;
-
+function init_placement(ranking) {
   let y = 0;
-  for (let i = min_rank; i <= max_rank; i++) {
+  for (let i = 0; i <= max_rank; i++) {
     if (y != 0)
       y += spacing_y;
 
@@ -291,28 +253,79 @@ function place(ranking) {
     rank_nodes.forEach(node => {
       node.x -= offset;
 
-      const x = node.x + node.refX;
-      const y = node.y + node.refY;
-      node.element.setAttribute("transform", `translate(${x} ${y})`);
+      if (node.element) {
+        const x = node.x + node.refX;
+        const y = node.y + node.refY;
+        node.element.setAttribute("transform", `translate(${x} ${y})`);
+      }
     });
 
     y += height;
   }
 }
 
-function draw_edges(roots) {
-  const nodes = [];
-  walk_post_order(roots, n=>{nodes.push(n);});
+function place(ranking) {
+  const ranks = ranking.ranks;
+  const max_rank = ranking.max_rank;
 
-  const edges_g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const spacing_x = 25;
+  const spacing_y = 40;
+
+  let y = 0;
+  for (let i = 0; i <= max_rank; i++) {
+    if (y != 0)
+      y += spacing_y;
+
+    const rank_nodes = ranks.get(i).slice().reverse();
+    if (rank_nodes.length == 0)
+      continue;
+    let x = 0;
+    let height = 0;
+    rank_nodes.forEach(node => {
+      if (x > 0)
+        x += spacing_x;
+      node.x = x;
+      node.y = y;
+      x += node.width;
+
+      height = Math.max(height, node.height);
+    });
+    const offset = x / 2.;
+    rank_nodes.forEach(node => {
+      node.x -= offset;
+
+      if (node.element) {
+        const x = node.x + node.refX;
+        const y = node.y + node.refY;
+        node.element.setAttribute("transform", `translate(${x} ${y})`);
+      }
+    });
+
+    y += height;
+  }
+}
+
+function draw_edges(nodes) {
+  const edges_g = document.createElementNS(SVGNS, "g");
   edges_g.setAttribute("class", "edges");
-  nodes.forEach(node => {
+  for (let node of nodes) {
+    if (!node.element) {
+      const circ = document.createElementNS(SVGNS, "circle");
+      circ.setAttribute("cx", node.x + 0.5);
+      circ.setAttribute("cy", node.y + 0.5);
+      circ.setAttribute("r", 3);
+      circ.setAttribute("fill", "red");
+      console.log(`circle at ${node.x} ${node.y}`);
+      edges_g.appendChild(circ);
+    }
+
     const out_y = node.y + node.height;
 
     const spacing_out_x = node.width / (node.out_edges.length + 1);
     let out_x = node.x;
-    node.out_edges.forEach(edge => {
+    for (let edge of node.out_edges) {
       const dest = edge.dest;
+      console.assert(dest.rank == node.rank+1);
       out_x += spacing_out_x;
       const in_x = dest.x + (dest.width / 2);
       const in_y = dest.y;
@@ -324,23 +337,25 @@ function draw_edges(roots) {
         path_data += `H${in_x}`;
       }
       path_data += `V${in_y}`;
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const path = document.createElementNS(SVGNS, "path");
       edge.attributes.forEach((value, name) => {
         path.setAttribute(name, value);
       });
       path.setAttribute("d", path_data);
       edges_g.appendChild(path);
-    });
-  });
+    }
+  }
   return edges_g;
 }
 
-function layout(element) {
+export function layout(element) {
   const roots = make_vertices(element);
   const ranking = rank(roots);
   order(ranking);
   place(ranking);
 
-  const edges_g = draw_edges(roots);
+  const edges_g = draw_edges(ranking.nodelist);
   element.appendChild(edges_g);
 }
+
+export default { layout };
