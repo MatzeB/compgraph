@@ -9,12 +9,9 @@ class Edge {
 }
 
 class Vertex {
-  constructor(element, width, height, refX, refY) {
+  constructor(element, bbox) {
     this.element = element;
-    this.width = width;
-    this.height = height;
-    this.refX = refX;
-    this.refY = refY;
+    this.bbox = bbox;
     this.rank = 0;
     this.out_edges = [];
     this.in_edges = [];
@@ -23,13 +20,18 @@ class Vertex {
 
 function make_vertex(element) {
   const bbox = element.getBBox();
-  return new Vertex(element, bbox.width, bbox.height, -bbox.x, -bbox.y);
+  return new Vertex(element, bbox);
 }
 
-function make_pseudo_vertex(rank, edge) {
-  const v = new Vertex(null, 1, 1, 0, 0);
+function make_pseudo_vertex(rank) {
+  const bbox = {
+    x: -0.5,
+    y: -0.5,
+    width: 1,
+    height: 1,
+  };
+  const v = new Vertex(null, bbox);
   v.rank = rank;
-  v.edge = edge;
   return v;
 }
 
@@ -166,7 +168,7 @@ function rank(roots) {
       const dest_rank = dest.rank;
       let last = node;
       for (let r = rank+1; r < dest_rank; ++r) {
-        const v = make_pseudo_vertex(r, edge);
+        const v = make_pseudo_vertex(r);
         if (!ranks.has(r))
           ranks.set(r, []);
         ranks.get(r).push(v);
@@ -230,79 +232,53 @@ function order(ranking) {
 }
 
 function init_placement(ranking) {
-  let y = 0;
-  for (let i = 0; i <= max_rank; i++) {
-    if (y != 0)
-      y += spacing_y;
-
-    const rank_nodes = ranks.get(i).slice().reverse();
-    if (rank_nodes.length == 0)
-      continue;
-    let x = 0;
-    let height = 0;
-    rank_nodes.forEach(node => {
-      if (x > 0)
-        x += spacing_x;
-      node.x = x;
-      node.y = y;
-      x += node.width;
-
-      height = Math.max(height, node.height);
-    });
-    const offset = x / 2.;
-    rank_nodes.forEach(node => {
-      node.x -= offset;
-
-      if (node.element) {
-        const x = node.x + node.refX;
-        const y = node.y + node.refY;
-        node.element.setAttribute("transform", `translate(${x} ${y})`);
-      }
-    });
-
-    y += height;
-  }
-}
-
-function place(ranking) {
-  const ranks = ranking.ranks;
-  const max_rank = ranking.max_rank;
-
   const spacing_x = 25;
   const spacing_y = 40;
 
   let y = 0;
-  for (let i = 0; i <= max_rank; i++) {
-    if (y != 0)
-      y += spacing_y;
-
-    const rank_nodes = ranks.get(i).slice().reverse();
+  for (let i = 0; i <= ranking.max_rank; i++) {
+    const rank_nodes = ranking.ranks.get(i).slice().reverse();
     if (rank_nodes.length == 0)
       continue;
     let x = 0;
-    let height = 0;
+    let min_y = 0;
+    let max_y = 0;
     rank_nodes.forEach(node => {
-      if (x > 0)
+      if (x > 0) {
         x += spacing_x;
+        x += node.bbox.width / 2;
+      }
       node.x = x;
-      node.y = y;
-      x += node.width;
+      x += node.bbox.width / 2;
 
-      height = Math.max(height, node.height);
+      min_y = Math.min(min_y, node.bbox.y);
+      max_y = Math.max(max_y, node.bbox.y + node.bbox.height);
     });
+
+    y += spacing_y;
+    y += -min_y;
+    console.log(`min_y: ${min_y} max_y: ${max_y} y: ${y}`);
+
     const offset = x / 2.;
     rank_nodes.forEach(node => {
       node.x -= offset;
+      node.y = y;
+      node.bbox.x += node.x;
+      node.bbox.y += node.y;
 
       if (node.element) {
-        const x = node.x + node.refX;
-        const y = node.y + node.refY;
+        const x = node.x;
+        const y = node.y;
         node.element.setAttribute("transform", `translate(${x} ${y})`);
       }
     });
 
-    y += height;
+    y += max_y;
   }
+}
+
+function place(ranking) {
+  init_placement(ranking);
 }
 
 function draw_edges(nodes) {
@@ -311,24 +287,24 @@ function draw_edges(nodes) {
   for (let node of nodes) {
     if (!node.element) {
       const circ = document.createElementNS(SVGNS, "circle");
-      circ.setAttribute("cx", node.x + 0.5);
-      circ.setAttribute("cy", node.y + 0.5);
+      circ.setAttribute("cx", node.x);
+      circ.setAttribute("cy", node.y);
       circ.setAttribute("r", 3);
       circ.setAttribute("fill", "red");
       console.log(`circle at ${node.x} ${node.y}`);
       edges_g.appendChild(circ);
     }
 
-    const out_y = node.y + node.height;
+    const out_y = node.bbox.y + node.bbox.height;
 
-    const spacing_out_x = node.width / (node.out_edges.length + 1);
-    let out_x = node.x;
+    const spacing_out_x = node.bbox.width / (node.out_edges.length + 1);
+    let out_x = node.bbox.x;
     for (let edge of node.out_edges) {
       const dest = edge.dest;
       console.assert(dest.rank == node.rank+1);
       out_x += spacing_out_x;
-      const in_x = dest.x + (dest.width / 2);
-      const in_y = dest.y;
+      const in_x = dest.bbox.x + (dest.bbox.width / 2);
+      const in_y = dest.bbox.y;
       const half_y = (out_y + in_y) / 2;
 
       let path_data = `M${out_x},${out_y}`;
