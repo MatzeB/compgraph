@@ -136,9 +136,9 @@ function rwalk_rpo(roots, func) {
 }
 
 class Ranking {
-  constructor(ranks, max_rank, nodelist) {
+  constructor(ranks, rank_max, nodelist) {
     this.ranks = ranks;
-    this.max_rank = max_rank;
+    this.rank_max = rank_max;
     this.nodelist = nodelist;
   }
 }
@@ -152,7 +152,7 @@ function rank(roots) {
   });
 
   let min_rank = 10000;
-  let max_rank = 0;
+  let rank_max = 0;
   const ranks = new Map();
   const nodelist = [];
   walk_post_order(roots, node => {
@@ -192,20 +192,20 @@ function rank(roots) {
     node.out_edges = new_edges;
 
     min_rank = Math.min(min_rank, rank);
-    max_rank = Math.max(max_rank, rank);
+    rank_max = Math.max(rank_max, rank);
     nodelist.push(node);
   });
   console.assert(min_rank == 0);
 
-  return new Ranking(ranks, max_rank, nodelist);
+  return new Ranking(ranks, rank_max, nodelist);
 }
 
 function order(ranking) {
   const ranks = ranking.ranks;
-  const max_rank = ranking.max_rank;
+  const rank_max = ranking.rank_max;
 
   let previous_rank_nodes = ranks.get(0);
-  for (let rank = 1; rank <= max_rank; rank++) {
+  for (let rank = 1; rank <= rank_max; rank++) {
     let idx = 0;
     for (let node of previous_rank_nodes) {
       node.order_idx = idx++;
@@ -235,12 +235,12 @@ function order(ranking) {
   }
 }
 
-function init_placement(ranking, params) {
+function initial_placement(ranking, params) {
   const spacing_x = params.spacing_x;
   const spacing_y = params.spacing_y;
 
   let y = 0;
-  for (let rank = 0; rank <= ranking.max_rank; rank++) {
+  for (let rank = 0; rank <= ranking.rank_max; rank++) {
     const rank_nodes = ranking.ranks.get(rank);
     let x = 0;
     let min_y = 0;
@@ -280,7 +280,7 @@ function median(arr) {
 function cycle_up(ranking, params) {
   const spacing_x = params.spacing_x;
 
-  for (let rank = ranking.max_rank - 1; rank >= 0; rank--) {
+  for (let rank = ranking.rank_max - 1; rank >= 0; rank--) {
     const rank_nodes = ranking.ranks.get(rank);
     console.assert(rank_nodes.length > 0);
 
@@ -317,10 +317,10 @@ function cycle_up(ranking, params) {
 }
 
 function cycle_down(ranking, params) {
-  const max_rank = ranking.max_rank;
+  const rank_max = ranking.rank_max;
   const spacing_x = params.spacing_x;
 
-  for (let rank = 1; rank <= max_rank; rank++) {
+  for (let rank = 1; rank <= rank_max; rank++) {
     const rank_nodes = ranking.ranks.get(rank);
     console.assert(rank_nodes.length > 0);
 
@@ -362,27 +362,22 @@ function place(ranking) {
     spacing_y: 30,
   };
 
-  init_placement(ranking, params);
+  initial_placement(ranking, params);
   for (let i = 0; i < 3; ++i) {
     cycle_up(ranking, params);
     cycle_down(ranking, params);
   }
 
   // Finalize
-  let y = 0;
-  for (let rank = 0; rank <= ranking.max_rank; rank++) {
+  for (let rank = 0; rank <= ranking.rank_max; rank++) {
     const rank_nodes = ranking.ranks.get(rank);
     if (rank_nodes.length == 0)
       continue;
 
     const last = rank_nodes[rank_nodes.length - 1];
     const max_x = last.x + last.bbox.x + last.bbox.width;
-    //const offset = max_x / 2.;
-    //const offset = 0;
 
     for (let node of rank_nodes) {
-      //node.x -= offset;
-
       if (node.element) {
         const x = node.x;
         const y = node.y;
@@ -394,58 +389,127 @@ function place(ranking) {
   }
 }
 
-function draw_edges(nodes, params) {
-  for (let node of nodes) {
-    if (!node.element) {
-      if (params.debug_draw) {
-        const circ = document.createElementNS(SVGNS, "circle");
-        circ.setAttribute("cx", node.x);
-        circ.setAttribute("cy", node.y);
-        circ.setAttribute("r", 3);
-        circ.setAttribute("fill", "red");
-        params.debug_draw.appendChild(circ);
+function position_edges(ranking, params) {
+  const ranks = ranking.ranks;
+  const rank_max = ranking.rank_max;
+
+  for (let rank = 0; rank <= rank_max; rank++) {
+    const rank_nodes = ranks.get(rank);
+    const edges = [];
+    const slack_x = 5;
+
+    let min_y = -10000;
+    let max_y = 10000;
+    for (let node of rank_nodes) {
+      const out_y = node.bbox.y + node.bbox.height;
+
+      const spacing_out_x = node.bbox.width / (node.out_edges.length + 1);
+      let out_x = node.bbox.x;
+      for (let edge of node.out_edges) {
+        const dest = edge.dest;
+        out_x += spacing_out_x;
+
+        edge.out_x = out_x;
+        edge.out_y = out_y;
+        edge.in_x = dest.bbox.x + (dest.bbox.width / 2);
+        edge.in_y = dest.bbox.y;
+        edge.begin = Math.min(edge.out_x, edge.in_x) - slack_x;
+        edge.end = Math.max(edge.out_x, edge.in_x) + slack_x;
+        edges.push(edge);
+
+        console.assert(edge.out_y < edge.in_y);
+        min_y = Math.max(min_y, edge.out_y);
+        max_y = Math.min(max_y, edge.in_y);
       }
-      continue;
     }
 
-    const out_y = node.bbox.y + node.bbox.height;
+    if (edges.length == 0)
+      continue;
 
-    const spacing_out_x = node.bbox.width / (node.out_edges.length + 1);
-    let out_x = node.bbox.x;
-    for (let edge of node.out_edges) {
-      const element = edge.element;
-      console.assert(element);
+    edges.sort((e0, e1) => (e0.begin - e1.begin));
+    let active = [];
+    let max_height_level = 0;
+    let min_height_level = 0;
+    for (let edge of edges) {
+      let x = edge.begin;
+      // TODO: We could keep the active list sorted to avoid checking all
+      // edges for filtering...
+      let local_max_height = 0;
+      let local_min_height = 0;
+      active = active.filter(active_edge => (active_edge.end >= x));
+      for (let active_edge of active) {
+        local_min_height = Math.min(local_min_height, active_edge.height_level-1);
+        local_max_height = Math.max(local_max_height, active_edge.height_level+1);
+      }
+      const backward = edge.out_x > edge.in_x;
+      const height_level = backward ? local_max_height : local_min_height;
+      edge.height_level = height_level;
+      min_height_level = Math.min(min_height_level, height_level);
+      max_height_level = Math.max(max_height_level, height_level);
+      active.push(edge);
+    }
 
-      out_x += spacing_out_x;
+    const height_level_range = max_height_level - min_height_level;
+    const level_spacing = (max_y - min_y) / (height_level_range + 2);
+    for (let edge of edges) {
+      edge.half_height = min_y + (edge.height_level+1-min_height_level)*level_spacing;
+    }
+  }
+}
 
-      let last_out_x = out_x;
-      let last_out_y = out_y;
-      let path_data = `M${out_x},${out_y}`;
-      let current_edge = edge;
-      while (true) {
-        let dest = current_edge.dest;
-        const in_x = dest.bbox.x + (dest.bbox.width / 2);
-        const in_y = dest.bbox.y;
-        const half_y = (last_out_y + in_y) / 2;
+function draw_edges(ranking, params) {
+  position_edges(ranking, params);
 
-        if (last_out_x != in_x) {
-          path_data += `V${half_y}`;
-          path_data += `H${in_x}`;
+  const ranks = ranking.ranks;
+  const rank_max = ranking.rank_max;
+
+  for (let rank = 0; rank < rank_max; rank++) {
+    const rank_nodes = ranks.get(rank);
+
+    for (let node of rank_nodes) {
+      if (!node.element) {
+        if (params.debug_draw) {
+          const circ = document.createElementNS(SVGNS, "circle");
+          circ.setAttribute("cx", node.x);
+          circ.setAttribute("cy", node.y);
+          circ.setAttribute("r", 3);
+          circ.setAttribute("fill", "red");
+          params.debug_draw.appendChild(circ);
         }
-        path_data += `V${in_y}`;
-
-        // In case of a pseudo node continue drawing...
-        if (dest.element == null) {
-          console.assert(dest.out_edges.length == 1);
-          current_edge = dest.out_edges[0];
-          last_out_x = in_x;
-          last_out_y = in_y;
-        } else {
-          break;
-        }
+        continue;
       }
 
-      element.setAttribute("d", path_data);
+      for (let edge of node.out_edges) {
+        const element = edge.element;
+        console.assert(element);
+
+        let path_data = `M${edge.out_x},${edge.out_y}`;
+        let current_edge = edge;
+        while (true) {
+          let dest = current_edge.dest;
+          const out_x = current_edge.out_x;
+          const out_y = current_edge.out_y;
+          const in_x = current_edge.in_x;
+          const in_y = current_edge.in_y;
+          const half_y = current_edge.half_height;
+
+          if (out_x != in_x) {
+            path_data += `V${half_y}`;
+            path_data += `H${in_x}`;
+          }
+          path_data += `V${in_y}`;
+
+          // In case of a pseudo node continue drawing...
+          if (dest.element == null) {
+            console.assert(dest.out_edges.length == 1);
+            current_edge = dest.out_edges[0];
+          } else {
+            break;
+          }
+        }
+
+        element.setAttribute("d", path_data);
+      }
     }
   }
 }
@@ -459,7 +523,7 @@ export function layout(element) {
   const params = {
     debug_draw: element,
   };
-  draw_edges(ranking.nodelist, params);
+  draw_edges(ranking, params);
 
   const debug_log_on_click = true;
   if (debug_log_on_click) {

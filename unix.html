@@ -90,11 +90,11 @@
 
         <path class="edge" src="5th" dst="6th"/>
         <path class="edge" src="5th" dst="pwb1"/>
-        <path class="edge" src="6th" dst="lsx"/>
         <path class="edge" src="6th" dst="1bsd"/>
+        <path class="edge" src="6th" dst="inter"/>
+        <path class="edge" src="6th" dst="lsx"/>
         <path class="edge" src="6th" dst="minu"/>
         <path class="edge" src="6th" dst="woll"/>
-        <path class="edge" src="6th" dst="inter"/>
         <path class="edge" src="inter" dst="ts3"/>
         <path class="edge" src="inter" dst="pwb2"/>
         <path class="edge" src="inter" dst="7th"/>
@@ -151,18 +151,11 @@
 
       document.querySelectorAll('svg .edge').forEach(element => {
         element.onmouseover = () => {
-          const oldclass = element.getAttribute("class");
-          if (!oldclass.endsWith(" mouseover_edge")) {
-            const newclass = oldclass + " mouseover_edge";
-            element.setAttribute("class", newclass);
-          }
+          if (!element.classList.contains("mouseover_edge"))
+            element.classList.add("mouseover_edge");
         };
         element.onmouseout = () => {
-          const oldclass = element.getAttribute("class");
-          if (oldclass.endsWith(" mouseover_edge")) {
-            const newclass = oldclass.slice(0, -(" mouseover_edge".length));
-            element.setAttribute("class", newclass);
-          }
+          element.classList.remove("mouseover_edge");
         };
       });
     </script>
