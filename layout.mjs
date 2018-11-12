@@ -460,6 +460,23 @@ export function layout(element) {
     debug_draw: element,
   };
   draw_edges(ranking.nodelist, params);
+
+  const debug_log_on_click = true;
+  if (debug_log_on_click) {
+    for (let node of ranking.nodelist) {
+      const element = node.element;
+      if (!element)
+        continue;
+      for (let child of element.querySelectorAll('*')) {
+        child.onclick = () => {
+          console.log(element);
+          console.log(`Id: ${node.id}`);
+          console.log(`Rank: ${node.rank}`);
+          console.log(`Order Idx: ${node.order_idx}`);
+        };
+      }
+    }
+  }
 }
 
 export default { layout };
