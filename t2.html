@@ -22,13 +22,14 @@
         <text id="add" class="boxed">Add</text>
         <text id="ret" class="boxed">Return</text>
         <circle id="circ" r="10" fill="red"></circle>
-        <edge src="circ" dst="ret"/>
-        <edge src="ret" dst="add"/>
-        <edge src="add" dst="p_arg0"/>
-        <edge src="add" dst="p_arg1"/>
-        <edge src="p_arg0" dst="p_args"/>
-        <edge src="p_arg1" dst="p_args"/>
-        <edge src="p_args" dst="start"/>
+
+        <path class="edge" src="circ" dst="ret"/>
+        <path class="edge" src="ret" dst="add"/>
+        <path class="edge" src="add" dst="p_arg0"/>
+        <path class="edge" src="add" dst="p_arg1"/>
+        <path class="edge" src="p_arg0" dst="p_args"/>
+        <path class="edge" src="p_arg1" dst="p_args"/>
+        <path class="edge" src="p_args" dst="start"/>
       </g>
     </svg>
     <script type="module">

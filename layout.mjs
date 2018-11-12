@@ -1,10 +1,10 @@
 const SVGNS = "http://www.w3.org/2000/svg";
 
 class Edge {
-  constructor(source, dest, out_idx) {
+  constructor(element, source, dest, out_idx) {
+    this.element = element;
     this.source = source;
     this.dest = dest;
-    this.attributes = new Map();
     this.out_idx = out_idx;
   }
 }
@@ -41,7 +41,7 @@ function make_vertices(element) {
   // Create vertices.
   for (let i = 0; i < element.children.length; i++) {
     const child = element.children[i];
-    if (child.nodeName != "edge" && child.hasAttribute("id")) {
+    if (child.hasAttribute("id") && child.getAttribute("class") != "edge") {
       const vertex = make_vertex(child);
       const id = child.getAttribute("id");
       vertex.id = id; // only for debugging
@@ -51,8 +51,12 @@ function make_vertices(element) {
   // Create edges.
   for (let i = 0; i < element.children.length; i++) {
     const child = element.children[i];
-    if (child.nodeName != 'edge')
+    if (child.getAttribute("class") != 'edge')
       continue;
+    if (child.nodeName != "path") {
+      console.log("Ignore edge element that isn't a path");
+      continue;
+    }
     const src = child.getAttribute("src");
     const dst = child.getAttribute("dst");
     if (!vertices.has(src)) {
@@ -68,14 +72,7 @@ function make_vertices(element) {
     const src_node = vertices.get(src);
     const dst_node = vertices.get(dst);
 
-    const edge = new Edge(src_node, dst_node, src_node.out_edges.length);
-    const input_attributes = new Map();
-    for (let i = child.attributes.length - 1; i >= 0; i--) {
-      const attrib = child.attributes[i];
-      if (attrib.name == "src" || attrib.name == "dst")
-        continue;
-      edge.attributes.set(attrib.name, attrib.value);
-    }
+    const edge = new Edge(child, src_node, dst_node, src_node.out_edges.length);
     src_node.out_edges.push(edge);
     dst_node.in_edges.push(edge);
   }
@@ -177,7 +174,8 @@ function rank(roots) {
         ranks.get(r).push(v);
         nodelist.push(v);
         const out_edges = last === node ? new_edges : last.out_edges;
-        const e = new Edge(last, v, out_edges.length);
+        const element = last === node ? edge.element : null;
+        const e = new Edge(element, last, v, out_edges.length);
         out_edges.push(e);
 
         v.in_edges.push(e);
@@ -186,7 +184,7 @@ function rank(roots) {
       if (last === node) {
         new_edges.push(edge);
       } else {
-        const e = new Edge(last, dest, last.out_edges.length);
+        const e = new Edge(null, last, dest, last.out_edges.length);
         dest.in_edges.push(e);
         last.out_edges.push(e);
       }
@@ -301,8 +299,6 @@ function cycle_up(ranking, params) {
         const dest_x = dest.x + dest.bbox.x + 0.5*dest.bbox.width;
         const source_offset = -source.bbox.x - (edge.out_idx+1) * spacing_out_x;
         const x = dest_x + source_offset;
-        console.log(`Edge from: ${source.id} to: ${dest.id} src_node_x ${source.x} src_bbox_x ${source.bbox.x} src_bbox_w ${source.bbox.width} dst_node_x ${dest.x} dst_bbox_x ${dest.bbox.x} dst_bbox_w ${dest.bbox.width}`);
-        console.log(`dest_x ${dest_x} source_offset ${source_offset} => ${x}`);
         x_pos.push(x);
       }
       const median_x = x_pos.length == 0 ? node.x : median(x_pos);
@@ -343,13 +339,9 @@ function cycle_down(ranking, params) {
         const spacing_out_x = source.bbox.width / (source.out_edges.length + 1);
         const source_x = source.x + source.bbox.x + (edge.out_idx+1) * spacing_out_x;
         const x = source_x + dest_offset;
-        console.log(`Edge from: ${source.id} to: ${dest.id} src_node_x ${source.x} src_bbox_x ${source.bbox.x} src_bbox_w ${source.bbox.width} dst_node_x ${dest.x} dst_bbox_x ${dest.bbox.x} dst_bbox_w ${dest.bbox.width}`);
-        console.log(`source_x ${source_x} dest_offset ${dest_offset} => ${x}`);
         x_pos.push(x);
       }
       const median_x = x_pos.length == 0 ? node.x : median(x_pos);
-
-      console.log(`Median: ${median_x}`);
 
       if (!last_node) {
         node.x = median_x;
@@ -402,17 +394,18 @@ function place(ranking) {
   }
 }
 
-function draw_edges(nodes) {
-  const edges_g = document.createElementNS(SVGNS, "g");
-  edges_g.setAttribute("class", "edges");
+function draw_edges(nodes, params) {
   for (let node of nodes) {
     if (!node.element) {
-      const circ = document.createElementNS(SVGNS, "circle");
-      circ.setAttribute("cx", node.x);
-      circ.setAttribute("cy", node.y);
-      circ.setAttribute("r", 3);
-      circ.setAttribute("fill", "red");
-      edges_g.appendChild(circ);
+      if (params.debug_draw) {
+        const circ = document.createElementNS(SVGNS, "circle");
+        circ.setAttribute("cx", node.x);
+        circ.setAttribute("cy", node.y);
+        circ.setAttribute("r", 3);
+        circ.setAttribute("fill", "red");
+        params.debug_draw.appendChild(circ);
+      }
+      continue;
     }
 
     const out_y = node.bbox.y + node.bbox.height;
@@ -420,28 +413,41 @@ function draw_edges(nodes) {
     const spacing_out_x = node.bbox.width / (node.out_edges.length + 1);
     let out_x = node.bbox.x;
     for (let edge of node.out_edges) {
-      const dest = edge.dest;
-      console.assert(dest.rank == node.rank+1);
-      out_x += spacing_out_x;
-      const in_x = dest.bbox.x + (dest.bbox.width / 2);
-      const in_y = dest.bbox.y;
-      const half_y = (out_y + in_y) / 2;
+      const element = edge.element;
+      console.assert(element);
 
+      out_x += spacing_out_x;
+
+      let last_out_x = out_x;
+      let last_out_y = out_y;
       let path_data = `M${out_x},${out_y}`;
-      if (out_x != in_x) {
-        path_data += `V${half_y}`;
-        path_data += `H${in_x}`;
+      let current_edge = edge;
+      while (true) {
+        let dest = current_edge.dest;
+        const in_x = dest.bbox.x + (dest.bbox.width / 2);
+        const in_y = dest.bbox.y;
+        const half_y = (last_out_y + in_y) / 2;
+
+        if (last_out_x != in_x) {
+          path_data += `V${half_y}`;
+          path_data += `H${in_x}`;
+        }
+        path_data += `V${in_y}`;
+
+        // In case of a pseudo node continue drawing...
+        if (dest.element == null) {
+          console.assert(dest.out_edges.length == 1);
+          current_edge = dest.out_edges[0];
+          last_out_x = in_x;
+          last_out_y = in_y;
+        } else {
+          break;
+        }
       }
-      path_data += `V${in_y}`;
-      const path = document.createElementNS(SVGNS, "path");
-      edge.attributes.forEach((value, name) => {
-        path.setAttribute(name, value);
-      });
-      path.setAttribute("d", path_data);
-      edges_g.appendChild(path);
+
+      element.setAttribute("d", path_data);
     }
   }
-  return edges_g;
 }
 
 export function layout(element) {
@@ -450,8 +456,10 @@ export function layout(element) {
   order(ranking);
   place(ranking);
 
-  const edges_g = draw_edges(ranking.nodelist);
-  element.appendChild(edges_g);
+  const params = {
+    debug_draw: element,
+  };
+  draw_edges(ranking.nodelist, params);
 }
 
 export default { layout };

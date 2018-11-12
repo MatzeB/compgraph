@@ -9,7 +9,7 @@
   font-size: 18px;
   fill: black;
 }
-.edges {
+.edge {
   stroke: black;
   marker-end: url(#arrow);
   fill: none;
