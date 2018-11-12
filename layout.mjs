@@ -1,10 +1,11 @@
 const SVGNS = "http://www.w3.org/2000/svg";
 
 class Edge {
-  constructor(source, dest) {
+  constructor(source, dest, out_idx) {
     this.source = source;
     this.dest = dest;
     this.attributes = new Map();
+    this.out_idx = out_idx;
   }
 }
 
@@ -42,7 +43,9 @@ function make_vertices(element) {
     const child = element.children[i];
     if (child.nodeName != "edge" && child.hasAttribute("id")) {
       const vertex = make_vertex(child);
-      vertices.set(child.getAttribute("id"), vertex);
+      const id = child.getAttribute("id");
+      vertex.id = id; // only for debugging
+      vertices.set(id, vertex);
     }
   }
   // Create edges.
@@ -65,7 +68,7 @@ function make_vertices(element) {
     const src_node = vertices.get(src);
     const dst_node = vertices.get(dst);
 
-    const edge = new Edge(src_node, dst_node);
+    const edge = new Edge(src_node, dst_node, src_node.out_edges.length);
     const input_attributes = new Map();
     for (let i = child.attributes.length - 1; i >= 0; i--) {
       const attrib = child.attributes[i];
@@ -173,19 +176,17 @@ function rank(roots) {
           ranks.set(r, []);
         ranks.get(r).push(v);
         nodelist.push(v);
-        const e = new Edge(last, v);
-        v.in_edges = e;
-        if (last === node) {
-          new_edges.push(e);
-        } else {
-          last.out_edges.push(e);
-        }
+        const out_edges = last === node ? new_edges : last.out_edges;
+        const e = new Edge(last, v, out_edges.length);
+        out_edges.push(e);
+
+        v.in_edges.push(e);
         last = v;
       }
       if (last === node) {
         new_edges.push(edge);
       } else {
-        const e = new Edge(last, dest);
+        const e = new Edge(last, dest, last.out_edges.length);
         dest.in_edges.push(e);
         last.out_edges.push(e);
       }
@@ -205,45 +206,48 @@ function order(ranking) {
   const ranks = ranking.ranks;
   const max_rank = ranking.max_rank;
 
-  for (let rank = 0; rank <= max_rank; rank++) {
-    const rank_nodes = ranks.get(rank);
-    if (rank > 0) {
-      for (let node of rank_nodes) {
-        let preliminary_idx = -1;
-        for (let edge of node.out_edges) {
-          const dest = edge.dest;
-          if (dest.rank == undefined || dest.rank != (rank-1))
-            continue;
-          if (dest.order_idx != undefined) {
-            preliminary_idx = dest.order_idx;
-            break;
-          }
-        }
-        node.order_idx = preliminary_idx;
-      }
-      rank_nodes.sort((n0, n1) => (n1.order_idx - n0.order_idx));
-    }
-
+  let previous_rank_nodes = ranks.get(0);
+  for (let rank = 1; rank <= max_rank; rank++) {
     let idx = 0;
-    for (let node of rank_nodes) {
+    for (let node of previous_rank_nodes) {
       node.order_idx = idx++;
     }
+
+    const rank_nodes = ranks.get(rank);
+    for (let node of rank_nodes) {
+      let order_val_sum = 0;
+      let n_in_edges = 0;
+      for (let edge of node.in_edges) {
+        const source = edge.source;
+        if (source.rank == undefined || source.rank != (rank-1))
+          continue;
+        if (source.order_idx != undefined) {
+          let order_val = source.order_idx;
+          if (edge.out_idx > 0)
+            order_val += edge.out_idx / (source.out_edges.length + 1);
+          order_val_sum += order_val;
+          n_in_edges++;
+        }
+      }
+      node.order_idx = n_in_edges == 0 ? -1 : order_val_sum / n_in_edges;
+    }
+    rank_nodes.sort((n0, n1) => (n0.order_idx - n1.order_idx));
+
+    previous_rank_nodes = rank_nodes;
   }
 }
 
-function init_placement(ranking) {
-  const spacing_x = 25;
-  const spacing_y = 40;
+function init_placement(ranking, params) {
+  const spacing_x = params.spacing_x;
+  const spacing_y = params.spacing_y;
 
   let y = 0;
-  for (let i = 0; i <= ranking.max_rank; i++) {
-    const rank_nodes = ranking.ranks.get(i).slice().reverse();
-    if (rank_nodes.length == 0)
-      continue;
+  for (let rank = 0; rank <= ranking.max_rank; rank++) {
+    const rank_nodes = ranking.ranks.get(rank);
     let x = 0;
     let min_y = 0;
     let max_y = 0;
-    rank_nodes.forEach(node => {
+    for (let node of rank_nodes) {
       if (x > 0) {
         x += spacing_x;
         x += node.bbox.width / 2;
@@ -253,32 +257,149 @@ function init_placement(ranking) {
 
       min_y = Math.min(min_y, node.bbox.y);
       max_y = Math.max(max_y, node.bbox.y + node.bbox.height);
-    });
+    }
 
     y += spacing_y;
     y += -min_y;
-    console.log(`min_y: ${min_y} max_y: ${max_y} y: ${y}`);
 
-    const offset = x / 2.;
-    rank_nodes.forEach(node => {
-      node.x -= offset;
+    for (let node of rank_nodes) {
       node.y = y;
-      node.bbox.x += node.x;
-      node.bbox.y += node.y;
+    }
+
+    y += max_y;
+  }
+}
+
+function median(arr) {
+  arr.sort();
+  const len = arr.length;
+  const median = len % 2 == 1
+    ? arr[(len-1)/2]
+    : (arr[len/2 - 1] + arr[len/2]) * 0.5;
+  return median;
+}
+
+function cycle_up(ranking, params) {
+  const spacing_x = params.spacing_x;
+
+  for (let rank = ranking.max_rank - 1; rank >= 0; rank--) {
+    const rank_nodes = ranking.ranks.get(rank);
+    console.assert(rank_nodes.length > 0);
+
+    let last_node;
+    for (let node of rank_nodes) {
+      const x_pos = []
+      const source = node;
+      const spacing_out_x = source.bbox.width / (node.out_edges.length + 1);
+      for (let edge of node.out_edges) {
+        const dest = edge.dest;
+
+        const dest_classify = dest.in_edges.length - dest.out_edges.length;
+        if (dest_classify > 0)
+          continue;
+
+        const dest_x = dest.x + dest.bbox.x + 0.5*dest.bbox.width;
+        const source_offset = -source.bbox.x - (edge.out_idx+1) * spacing_out_x;
+        const x = dest_x + source_offset;
+        console.log(`Edge from: ${source.id} to: ${dest.id} src_node_x ${source.x} src_bbox_x ${source.bbox.x} src_bbox_w ${source.bbox.width} dst_node_x ${dest.x} dst_bbox_x ${dest.bbox.x} dst_bbox_w ${dest.bbox.width}`);
+        console.log(`dest_x ${dest_x} source_offset ${source_offset} => ${x}`);
+        x_pos.push(x);
+      }
+      const median_x = x_pos.length == 0 ? node.x : median(x_pos);
+
+      if (!last_node) {
+        node.x = median_x;
+      } else {
+        const bbox = last_node.bbox;
+        const last_right = last_node.x + bbox.x + bbox.width;
+        const min_x = last_right + spacing_x - node.bbox.x;
+        node.x = Math.max(min_x, median_x);
+      }
+      last_node = node;
+    }
+  }
+}
+
+function cycle_down(ranking, params) {
+  const max_rank = ranking.max_rank;
+  const spacing_x = params.spacing_x;
+
+  for (let rank = 1; rank <= max_rank; rank++) {
+    const rank_nodes = ranking.ranks.get(rank);
+    console.assert(rank_nodes.length > 0);
+
+    let last_node;
+    for (let node of rank_nodes) {
+      const x_pos = []
+      const dest = node;
+      const dest_offset = -dest.bbox.x -0.5*dest.bbox.width;
+      for (let edge of node.in_edges) {
+        const source = edge.source;
+
+        const source_classify = source.in_edges.length - source.out_edges.length;
+        if (source_classify < 0)
+          continue;
+
+        const spacing_out_x = source.bbox.width / (source.out_edges.length + 1);
+        const source_x = source.x + source.bbox.x + (edge.out_idx+1) * spacing_out_x;
+        const x = source_x + dest_offset;
+        console.log(`Edge from: ${source.id} to: ${dest.id} src_node_x ${source.x} src_bbox_x ${source.bbox.x} src_bbox_w ${source.bbox.width} dst_node_x ${dest.x} dst_bbox_x ${dest.bbox.x} dst_bbox_w ${dest.bbox.width}`);
+        console.log(`source_x ${source_x} dest_offset ${dest_offset} => ${x}`);
+        x_pos.push(x);
+      }
+      const median_x = x_pos.length == 0 ? node.x : median(x_pos);
+
+      console.log(`Median: ${median_x}`);
+
+      if (!last_node) {
+        node.x = median_x;
+      } else {
+        const bbox = last_node.bbox;
+        const last_right = last_node.x + bbox.x + bbox.width;
+        const min_x = last_right + spacing_x - node.bbox.x;
+        node.x = Math.max(min_x, median_x);
+      }
+      last_node = node;
+    }
+  }
+}
+
+function place(ranking) {
+  const params = {
+    spacing_x: 15,
+    spacing_y: 30,
+  };
+
+  init_placement(ranking, params);
+  for (let i = 0; i < 3; ++i) {
+    cycle_up(ranking, params);
+    cycle_down(ranking, params);
+  }
+
+  // Finalize
+  let y = 0;
+  for (let rank = 0; rank <= ranking.max_rank; rank++) {
+    const rank_nodes = ranking.ranks.get(rank);
+    if (rank_nodes.length == 0)
+      continue;
+
+    const last = rank_nodes[rank_nodes.length - 1];
+    const max_x = last.x + last.bbox.x + last.bbox.width;
+    //const offset = max_x / 2.;
+    //const offset = 0;
+
+    for (let node of rank_nodes) {
+      //node.x -= offset;
 
       if (node.element) {
         const x = node.x;
         const y = node.y;
         node.element.setAttribute("transform", `translate(${x} ${y})`);
       }
-    });
-
-    y += max_y;
+      node.bbox.x += node.x;
+      node.bbox.y += node.y;
+    }
   }
-}
-
-function place(ranking) {
-  init_placement(ranking);
 }
 
 function draw_edges(nodes) {
@@ -291,7 +412,6 @@ function draw_edges(nodes) {
       circ.setAttribute("cy", node.y);
       circ.setAttribute("r", 3);
       circ.setAttribute("fill", "red");
-      console.log(`circle at ${node.x} ${node.y}`);
       edges_g.appendChild(circ);
     }
 
