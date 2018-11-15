@@ -301,16 +301,17 @@ function cycle_up(ranking, params) {
         const x = dest_x + source_offset;
         x_pos.push(x);
       }
-      const median_x = x_pos.length == 0 ? node.x : median(x_pos);
 
-      if (!last_node) {
-        node.x = median_x;
-      } else {
+      let x = node.x
+      if (x_pos.length > 0)
+        x = median(x_pos);
+      if (last_node) {
         const bbox = last_node.bbox;
         const last_right = last_node.x + bbox.x + bbox.width;
         const min_x = last_right + spacing_x - node.bbox.x;
-        node.x = Math.max(min_x, median_x);
+        x = Math.max(min_x, x);
       }
+      node.x = x;
       last_node = node;
     }
   }
@@ -341,27 +342,23 @@ function cycle_down(ranking, params) {
         const x = source_x + dest_offset;
         x_pos.push(x);
       }
-      const median_x = x_pos.length == 0 ? node.x : median(x_pos);
 
-      if (!last_node) {
-        node.x = median_x;
-      } else {
+      let x = node.x
+      if (x_pos.length > 0)
+        x = median(x_pos);
+      if (last_node) {
         const bbox = last_node.bbox;
         const last_right = last_node.x + bbox.x + bbox.width;
         const min_x = last_right + spacing_x - node.bbox.x;
-        node.x = Math.max(min_x, median_x);
+        x = Math.max(min_x, x);
       }
+      node.x = x;
       last_node = node;
     }
   }
 }
 
-function place(ranking) {
-  const params = {
-    spacing_x: 15,
-    spacing_y: 30,
-  };
-
+function position(ranking, params) {
   initial_placement(ranking, params);
   for (let i = 0; i < 3; ++i) {
     cycle_up(ranking, params);
@@ -514,15 +511,19 @@ function draw_edges(ranking, params) {
   }
 }
 
-export function layout(element) {
+export function layout(element, params) {
+  const default_params = {
+    spacing_x: 15,
+    spacing_y: 30,
+    debug_draw: element,
+  };
+  params = default_params;
+
   const roots = make_vertices(element);
   const ranking = rank(roots);
   order(ranking);
-  place(ranking);
+  position(ranking, params);
 
-  const params = {
-    debug_draw: element,
-  };
   draw_edges(ranking, params);
 
   const debug_log_on_click = true;
