@@ -1,0 +1,30 @@
+{
+  "name": "compgraph",
+  "version": "1.0.0",
+  "description": "digraph hierarchical graph layout",
+  "main": "test.html",
+  "devDependencies": {
+    "babel-eslint": "^9.0.0",
+    "eslint": "^5.9.0",
+    "eslint-config-react-app": "^3.0.5",
+    "eslint-plugin-flowtype": "^2.50.3",
+    "eslint-plugin-import": "^2.14.0",
+    "eslint-plugin-jsx-a11y": "^6.1.2",
+    "eslint-plugin-node": "^8.0.0",
+    "eslint-plugin-promise": "^4.0.1",
+    "eslint-plugin-react": "^7.11.1",
+    "eslint-plugin-standard": "^4.0.0",
+    "http-server": "^0.11.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint *.mjs",
+    "start": "http-server . -c-1 -o"
+  },
+  "repository": {
+    "type": "git",
+    "url": "ssh://matze@server/home/matze/repos/compgraph.git"
+  },
+  "author": "Matthias Braun <matze@braunis.de>",
+  "license": "BSD-2-Clause"
+}
