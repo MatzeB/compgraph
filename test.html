@@ -1,25 +1,10 @@
+<html>
   <head>
-    <script type="text/javascript" src="https://d3js.org/d3.v5.min.js"></script>
-    <style>
-      .node #back {
-        fill: grey;
-        stroke: blue;
-        stroke-width: 2;
-      }
-      .node #title {
-        text-anchor: start;
-        font-family: Verdana, Arial, sans-serif;
-        font-size: 18px;
-      }
-      .edges {
-        stroke: black;
-        marker-end: url(#arrow);
-        fill: none;
-      }
-    </style>
+    <link rel="stylesheet" type="text/css" href="layout.css">
   </head>
   <body>
-    <svg width="0" height="0">
+    <!-- imported layout.svg here (is there a better way?) -->
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="0" height="0">
       <defs>
         <marker id="arrow" refX="10" refY="5"
                 markerWidth="10" markerHeight="10" orient="auto-start-reverse">
@@ -27,190 +12,32 @@
         </marker>
       </defs>
     </svg>
-    <svg id="canvas" width="400" height="800" viewBox="-200 0 400 800">
-      <g class="node">
-        <text id="title" x="10" y="21.65625">Return</text>
-        <rect id="back" width="80.78125" height="31.65625"></rect>
+
+    <svg width="500" height="800" viewBox="-250 0 600 800" id="canvas">
+      <g class="layout">
+        <text id="start" class="boxed">Start</text>
+        <text id="p_args" class="boxed">Proj Args</text>
+        <text id="p_arg0" class="boxed">Proj Arg 0</text>
+        <text id="p_arg1" class="boxed">Proj Arg 1</text>
+        <text id="add" class="boxed">Add</text>
+        <text id="ret" class="boxed">Return</text>
+        <circle id="circ" r="10" fill="red"></circle>
+
+        <path class="edge" src="circ" dst="ret"/>
+        <path class="edge" src="ret" dst="add"/>
+        <path class="edge" src="add" dst="p_arg0"/>
+        <path class="edge" src="add" dst="p_arg1"/>
+        <path class="edge" src="p_arg0" dst="p_args"/>
+        <path class="edge" src="p_arg1" dst="p_args"/>
+        <path class="edge" src="p_args" dst="start"/>
       </g>
     </svg>
-    <script>
-      class Node {
-        constructor(text, inputs) {
-          this.text = text;
-          this.inputs = inputs;
-          this.users = [];
-          inputs.forEach(inp => {
-            inp.users.push(this);
-          });
-          this.rank = 0;
-        }
-      }
-      function make_node(svg, node) {
-        const g = svg.append("g").attr("class", "node");
+    <script type="module">
+      import { make_box } from './drawing.mjs';
+      import { layout } from './layout.mjs';
 
-        const text = g.append('text')
-          .attr("id", "title")
-          .text(node.text);
-        const bbox = text.node().getBBox();
-
-        const i_left = 10;
-        const i_right = 10;
-        const i_top = 5;
-        const i_bottom = 5;
-
-        const rect = g.append("rect")
-          .attr("id", "back")
-          .attr("width", i_left + bbox.width + i_right)
-          .attr("height", i_top + bbox.height + i_bottom)
-          .lower();
-        text.attr("x", i_left);
-        text.attr("y", bbox.height);
-
-        node.g = g;
-        node.width = bbox.width + i_left + i_right;
-        node.height = bbox.height + i_top + i_bottom;
-        return g;
-      }
-
-      function walk_step(node, visited, pre_func, post_func) {
-        visited.add(node);
-        pre_func(node);
-        node.inputs.forEach(pred => {
-          if (visited.has(pred))
-            return;
-          walk_step(pred, visited, pre_func, post_func);
-        });
-        post_func(node);
-      }
-      function uwalk_step(node, visited, pre_func, post_func) {
-        visited.add(node);
-        pre_func(node);
-        node.users.forEach(succ => {
-          if (visited.has(succ))
-            return;
-          uwalk_step(succ, visited, pre_func, post_func);
-        });
-        post_func(node);
-      }
-
-      function walk(node, pre_func, post_func) {
-        const visited = new Set();
-        walk_step(node, visited, pre_func, post_func);
-      }
-      function walk_post_order(node, func) {
-        walk(node, n=>{}, func);
-      }
-      function walk_rpo(node, func) {
-        const list = [];
-        walk_post_order(node, n => {list.push(n);});
-        list.reverse().forEach(func);
-      }
-      function uwalk(node, pre_func, post_func) {
-        const visited = new Set();
-        uwalk_step(node, visited, pre_func, post_func);
-      }
-      function uwalk_rpo(node, func) {
-        const list = [];
-        uwalk(node, n=>{}, n=>{list.push(n);});
-        list.reverse().forEach(func);
-      }
-
-      const begin = new Node("Start", []);
-      const proj_args = new Node("Proj Args", [begin]);
-      const arg0 = new Node("Proj Arg 0", [proj_args]);
-      const arg1 = new Node("Proj Arg 1", [proj_args]);
-      const add = new Node("Add", [arg0, arg1]);
-      const ret = new Node("Return", [add]);
-
-      uwalk_rpo(begin, node => {
-        node.users.forEach(pred => {
-          pred.rank = Math.max(pred.rank, node.rank+1);
-        });
-      });
-      const nodes = [];
-      walk_rpo(ret, n=>{nodes.push(n);});
-      nodes.forEach(node => {
-        console.log(`"${node.text}" rank: ${node.rank}`);
-      });
-
-      function place(svg, nodes) {
-        var min_rank = 10000;
-        var max_rank = 0;
-        const ranks = new Map();
-        nodes.forEach(node => {
-          const rank = node.rank;
-          if (!ranks.has(rank))
-            ranks.set(rank, []);
-          ranks.get(rank).push(node);
-
-          min_rank = Math.min(min_rank, rank);
-          max_rank = Math.max(max_rank, rank);
-          make_node(svg, node);
-        });
-
-        const spacing_x = 25;
-        const spacing_y = 40;
-
-        var y = 0;
-        for (var i = min_rank; i <= max_rank; i++) {
-          if (y != 0)
-            y += spacing_y;
-
-          const rank_nodes = ranks.get(i).reverse();
-          if (rank_nodes.length == 0)
-            continue;
-          var x = 0;
-          var height = 0;
-          rank_nodes.forEach(node => {
-            if (x > 0)
-              x += spacing_x;
-            node.x = x;
-            node.y = y;
-            x += node.width;
-
-            height = Math.max(height, node.height);
-          });
-          const offset = x / 2.;
-          rank_nodes.forEach(node => {
-            node.x -= offset;
-          });
-
-          y += height;
-        }
-
-        nodes.forEach(node => {
-          console.log(node);
-          node.g.attr("transform", `translate(${node.x} ${node.y})`);
-        });
-      }
-
-      function draw_vertices(svg, nodes) {
-        const edges_g = svg.append("g").attr("class", "edges");
-        nodes.forEach(node => {
-          const in_y = node.y;
-
-          const spacing_in_x = node.width / (node.inputs.length + 1);
-          var in_x = node.x;
-          node.inputs.forEach(inp => {
-            in_x += spacing_in_x;
-            const out_x = inp.x + (inp.width / 2);
-            const out_y = inp.y + inp.height;
-            const half_y = (in_y + out_y) / 2;
-
-            path = `M${in_x},${in_y}`;
-            if (in_x != out_x) {
-              path += `V${half_y}`;
-              path += `H${out_x}`;
-            }
-            path += `V${out_y}`;
-            edges_g.append("path").attr("d", path);
-          });
-        });
-      }
-
-      const svg = d3.select("#canvas");
-      place(svg, nodes);
-      draw_vertices(svg, nodes);
+      document.querySelectorAll('.boxed').forEach(make_box);
+      document.querySelectorAll('svg .layout').forEach(layout);
     </script>
   </body>
 </html>
