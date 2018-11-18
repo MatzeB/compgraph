@@ -37,7 +37,9 @@
       import { layout } from './layout.mjs';
 
       document.querySelectorAll('.boxed').forEach(makeBox);
-      document.querySelectorAll('svg .layout').forEach(layout);
+      document.querySelectorAll('svg .layout').forEach(svg => {
+        layout(svg, {ordered_outs: true});
+      });
     </script>
   </body>
 </html>

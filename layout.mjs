@@ -13,7 +13,6 @@ class Vertex {
   constructor(element, bbox) {
     this.element = element;
     this.bbox = bbox;
-    this.rank = 0;
     this.out_edges = [];
     this.in_edges = [];
   }
@@ -76,7 +75,7 @@ function make_vertices(element) {
     src_node.out_edges.push(edge);
     dst_node.in_edges.push(edge);
   }
-  // Determine roots.
+
   const roots = [];
   for (let v of vertices.values()) {
     if (v.in_edges.length === 0)
@@ -85,30 +84,23 @@ function make_vertices(element) {
   return roots;
 }
 
-function walk_step(node, visited, pre_func, post_func) {
+function walk_step(node, visited, result) {
   if (visited.has(node))
     return;
   visited.add(node);
-  pre_func(node);
   for (let edge of node.out_edges) {
-    walk_step(edge.dest, visited, pre_func, post_func);
+    walk_step(edge.dest, visited, result);
   }
-  post_func(node);
+  result.push(node);
 }
 
-function walk(roots, pre_func, post_func) {
+function post_order(roots) {
+  const result = [];
   const visited = new Set();
   for (let node of roots) {
-    walk_step(node, visited, pre_func, post_func);
+    walk_step(node, visited, result);
   }
-}
-function walk_post_order(roots, func) {
-  walk(roots, ()=>{}, func);
-}
-function walk_rpo(roots, func) {
-  const list = [];
-  walk_post_order(roots, n => {list.push(n);});
-  list.reverse().forEach(func);
+  return result;
 }
 
 class Ranking {
@@ -120,22 +112,31 @@ class Ranking {
 }
 
 function rank(roots) {
-  walk_rpo(roots, node => {
+  const reverse_post_order = post_order(roots).reverse();
+  let rank_max = 0;
+  for (let node of reverse_post_order) {
+    if (node.out_edges.length == 0)
+      continue;
+
+    const next_rank = node.rank !== undefined ? node.rank+1 : 1;
+    rank_max = Math.max(rank_max, next_rank);
     for (let edge of node.out_edges) {
       const succ = edge.dest;
-      succ.rank = Math.max(succ.rank, node.rank+1);
+      if (succ.rank === undefined || succ.rank < next_rank)
+        succ.rank = next_rank;
     }
-  });
+  }
 
-  let min_rank = 10000;
-  let rank_max = 0;
-  const ranks = new Map();
+  const ranks = [];
+  for (let r = 0; r <= rank_max; ++r)
+    ranks.push([]);
+
   const nodelist = [];
-  walk_post_order(roots, node => {
+  for (let node of reverse_post_order) {
+    if (node.rank === undefined)
+      node.rank = 0;
     const rank = node.rank;
-    if (!ranks.has(rank))
-      ranks.set(rank, []);
-    ranks.get(rank).push(node);
+    ranks[rank].push(node);
 
     // Create pseudo nodes for connecting ranks
     const new_edges = [];
@@ -145,33 +146,29 @@ function rank(roots) {
       let last = node;
       for (let r = rank+1; r < dest_rank; ++r) {
         const v = make_pseudo_vertex(r);
-        if (!ranks.has(r))
-          ranks.set(r, []);
-        ranks.get(r).push(v);
+        ranks[r].push(v);
         nodelist.push(v);
         const out_edges = last === node ? new_edges : last.out_edges;
         const element = last === node ? edge.element : null;
-        const e = new Edge(element, last, v, out_edges.length);
-        out_edges.push(e);
+        const new_edge = new Edge(element, last, v, out_edges.length);
+        out_edges.push(new_edge);
 
-        v.in_edges.push(e);
+        v.in_edges.push(new_edge);
         last = v;
       }
       if (last === node) {
         new_edges.push(edge);
       } else {
-        const e = new Edge(null, last, dest, last.out_edges.length);
-        dest.in_edges.push(e);
-        last.out_edges.push(e);
+        const new_edge = new Edge(null, last, dest, last.out_edges.length);
+        dest.in_edges = dest.in_edges.filter(e => e !== edge);
+        dest.in_edges.push(new_edge);
+        last.out_edges.push(new_edge);
       }
     }
     node.out_edges = new_edges;
 
-    min_rank = Math.min(min_rank, rank);
-    rank_max = Math.max(rank_max, rank);
     nodelist.push(node);
-  });
-  console.assert(min_rank === 0);
+  }
 
   return new Ranking(ranks, rank_max, nodelist);
 }
@@ -180,14 +177,14 @@ function order(ranking) {
   const ranks = ranking.ranks;
   const rank_max = ranking.rank_max;
 
-  let previous_rank_nodes = ranks.get(0);
+  let previous_rank_nodes = ranks[0];
   for (let rank = 1; rank <= rank_max; rank++) {
     let idx = 0;
     for (let node of previous_rank_nodes) {
       node.order_idx = idx++;
     }
 
-    const rank_nodes = ranks.get(rank);
+    const rank_nodes = ranks[rank];
     for (let node of rank_nodes) {
       let order_val_sum = 0;
       let n_in_edges = 0;
@@ -216,8 +213,7 @@ function initial_placement(ranking, params) {
   const spacing_y = params.spacing_y;
 
   let y = 0;
-  for (let rank = 0; rank <= ranking.rank_max; rank++) {
-    const rank_nodes = ranking.ranks.get(rank);
+  for (let rank_nodes of ranking.ranks) {
     let x = 0;
     let min_y = 0;
     let max_y = 0;
@@ -257,7 +253,7 @@ function cycle_up(ranking, params) {
   const spacing_x = params.spacing_x;
 
   for (let rank = ranking.rank_max - 1; rank >= 0; rank--) {
-    const rank_nodes = ranking.ranks.get(rank);
+    const rank_nodes = ranking.ranks[rank];
     console.assert(rank_nodes.length > 0);
 
     let last_node;
@@ -298,7 +294,7 @@ function cycle_down(ranking, params) {
   const spacing_x = params.spacing_x;
 
   for (let rank = 1; rank <= rank_max; rank++) {
-    const rank_nodes = ranking.ranks.get(rank);
+    const rank_nodes = ranking.ranks[rank];
     console.assert(rank_nodes.length > 0);
 
     let last_node;
@@ -342,10 +338,8 @@ function position(ranking, params) {
   }
 
   // Finalize
-  for (let rank = 0; rank <= ranking.rank_max; rank++) {
-    const rank_nodes = ranking.ranks.get(rank);
-    if (rank_nodes.length === 0)
-      continue;
+  for (let rank_nodes of ranking.ranks) {
+    console.assert(rank_nodes.length > 0);
 
     for (let node of rank_nodes) {
       if (node.element) {
@@ -359,35 +353,50 @@ function position(ranking, params) {
   }
 }
 
-function position_edges(ranking) {
-  const non_overlap_slack_x = 5;
+function position_edges(ranking, params) {
+  const non_overlap_slack_x = 3;
   const ranks = ranking.ranks;
-  const rank_max = ranking.rank_max;
 
-  for (let rank = 0; rank <= rank_max; rank++) {
-    const rank_nodes = ranks.get(rank);
+  for (let rank_nodes of ranks) {
 
     for (let node of rank_nodes) {
+      if (!params.ordered_ins) {
+        node.in_edges.sort((e0, e1) => {
+          const source0 = e0.source;
+          const source1 = e1.source;
+          const x0 = source0.x + source0.bbox.x + 0.5*source0.bbox.width;
+          const x1 = source1.x + source1.bbox.x + 0.5*source1.bbox.width;
+          return x0 - x1;
+        });
+      }
+
       const bbox = node.bbox;
       const in_y = node.bbox.y;
+      const spacing = bbox.width / (node.in_edges.length + 1);
+      let in_x = bbox.x;
       for (let edge of node.in_edges) {
-        edge.in_x = bbox.x + (bbox.width / 2);
+        in_x += spacing;
+        edge.in_x = in_x;
         edge.in_y = in_y;
       }
     }
   }
 
-  for (let rank = 0; rank <= rank_max; rank++) {
-    const rank_nodes = ranks.get(rank);
+  for (let rank_nodes of ranks) {
     const edges = [];
 
     for (let node of rank_nodes) {
-      const out_y = node.bbox.y + node.bbox.height;
+      if (!params.ordered_outs) {
+        node.out_edges.sort((e0, e1) => {
+          return e0.in_x - e1.in_x;
+        });
+      }
 
-      const spacing_out_x = node.bbox.width / (node.out_edges.length + 1);
+      const out_y = node.bbox.y + node.bbox.height;
+      const spacing = node.bbox.width / (node.out_edges.length + 1);
       let out_x = node.bbox.x;
       for (let edge of node.out_edges) {
-        out_x += spacing_out_x;
+        out_x += spacing;
 
         edge.out_x = out_x;
         edge.out_y = out_y;
@@ -434,20 +443,14 @@ function position_edges(ranking) {
     const height_level_range = max_height_level - min_height_level;
     const level_spacing = (max_y - min_y) / (height_level_range + 2);
     for (let edge of edges) {
-      edge.half_height = min_y + (edge.height_level+1-min_height_level)*level_spacing;
+      const level_height = (edge.height_level+1-min_height_level)*level_spacing;
+      edge.half_height = min_y + level_height;
     }
   }
 }
 
 function draw_edges(ranking, params) {
-  position_edges(ranking);
-
-  const ranks = ranking.ranks;
-  const rank_max = ranking.rank_max;
-
-  for (let rank = 0; rank < rank_max; rank++) {
-    const rank_nodes = ranks.get(rank);
-
+  for (let rank_nodes of ranking.ranks) {
     for (let node of rank_nodes) {
       if (!node.element) {
         if (params.debug_draw) {
@@ -514,19 +517,23 @@ function add_debug_handlers(element, ranking, params) {
 }
 
 export function layout(element, params) {
-  const default_params = {
-    spacing_x: 15,
-    spacing_y: 30,
-    debug_draw: element,
-    debug_log_on_click: true,
-  };
-  params = default_params;
+  if (params === undefined)
+    params = {};
+  if (params.spacing_x === undefined)
+    params.spacing_x = 15;
+  if (params.spacing_y === undefined)
+    params.spacing_y = 30;
+  if (params.debug_draw === undefined)
+    params.debug_draw = element;
+  if (params.debug_log_on_click === undefined)
+    params.debug_log_on_click = true;
 
   const roots = make_vertices(element);
   const ranking = rank(roots);
   order(ranking);
   position(ranking, params);
 
+  position_edges(ranking, params);
   draw_edges(ranking, params);
 
   add_debug_handlers(element, ranking, params);
