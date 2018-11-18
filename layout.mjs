@@ -357,8 +357,8 @@ function position_edges(ranking, params) {
   const non_overlap_slack_x = 3;
   const ranks = ranking.ranks;
 
+  // Determine edge positions on node inputs.
   for (let rank_nodes of ranks) {
-
     for (let node of rank_nodes) {
       if (!params.ordered_ins) {
         node.in_edges.sort((e0, e1) => {
@@ -385,6 +385,7 @@ function position_edges(ranking, params) {
   for (let rank_nodes of ranks) {
     const edges = [];
 
+    // Determine edge positions on node outputs.
     for (let node of rank_nodes) {
       if (!params.ordered_outs) {
         node.out_edges.sort((e0, e1) => {
@@ -408,6 +409,7 @@ function position_edges(ranking, params) {
     if (edges.length === 0)
       continue;
 
+    // Assign heights trying to give parallel edges different levels.
     let min_y = -10000;
     let max_y = 10000;
     for (let edge of edges) {
@@ -416,8 +418,8 @@ function position_edges(ranking, params) {
       min_y = Math.max(min_y, edge.out_y);
       max_y = Math.min(max_y, edge.in_y);
     }
-
     edges.sort((e0, e1) => (e0.begin - e1.begin));
+
     let active = [];
     let max_height_level = 0;
     let min_height_level = 0;
