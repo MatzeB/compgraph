@@ -1,5 +1,12 @@
 const SVGNS = 'http://www.w3.org/2000/svg';
 
+class Graph {
+  constructor(roots, leaves) {
+    this.roots = roots;
+    this.leaves = leaves;
+  }
+}
+
 class Edge {
   constructor(element, source, dest, out_idx) {
     this.element = element;
@@ -35,7 +42,7 @@ function make_pseudo_vertex(rank) {
   return v;
 }
 
-function make_vertices(element) {
+function make_graph(element) {
   const vertices = new Map();
   // Create vertices.
   for (let i = 0; i < element.children.length; i++) {
@@ -43,7 +50,7 @@ function make_vertices(element) {
     if (child.hasAttribute('id') && child.getAttribute('class') !== 'edge') {
       const vertex = make_vertex(child);
       const id = child.getAttribute('id');
-      vertex.id = id; // only for debugging
+      vertex.id = id;
       vertices.set(id, vertex);
     }
   }
@@ -77,11 +84,14 @@ function make_vertices(element) {
   }
 
   const roots = [];
+  const leaves = [];
   for (let v of vertices.values()) {
     if (v.in_edges.length === 0)
       roots.push(v);
+    if (v.out_edges.length === 0)
+      leaves.push(v);
   }
-  return roots;
+  return new Graph(roots, leaves);
 }
 
 function walk_step(node, visited, result) {
@@ -103,6 +113,25 @@ function post_order(roots) {
   return result;
 }
 
+function walk_step_ins(node, visited, result) {
+  if (visited.has(node))
+    return;
+  visited.add(node);
+  for (let edge of node.in_edges) {
+    walk_step_ins(edge.source, visited, result);
+  }
+  result.push(node);
+}
+
+function post_order_ins(leaves) {
+  const result = [];
+  const visited = new Set();
+  for (let node of leaves) {
+    walk_step_ins(node, visited, result);
+  }
+  return result;
+}
+
 class Ranking {
   constructor(ranks, rank_max, nodelist) {
     this.ranks = ranks;
@@ -111,20 +140,52 @@ class Ranking {
   }
 }
 
-function rank(roots) {
-  const reverse_post_order = post_order(roots).reverse();
-  let rank_max = 0;
-  for (let node of reverse_post_order) {
-    if (node.out_edges.length == 0)
-      continue;
+function compute_min_rank(graph) {
+  const roots = graph.roots;
+  for (let node of roots) {
+    node.min_rank = 0;
+  }
 
-    const next_rank = node.rank !== undefined ? node.rank+1 : 1;
-    rank_max = Math.max(rank_max, next_rank);
+  const reverse_post_order = post_order(roots).reverse();
+  for (let node of reverse_post_order) {
+    console.assert(node.min_rank !== undefined);
+    const next_rank = node.min_rank + 1;
     for (let edge of node.out_edges) {
       const succ = edge.dest;
-      if (succ.rank === undefined || succ.rank < next_rank)
-        succ.rank = next_rank;
+      if (succ.min_rank === undefined || succ.min_rank < next_rank)
+        succ.min_rank = next_rank;
     }
+  }
+}
+
+function compute_max_rank(graph) {
+  const leaves = graph.leaves;
+  for (let node of leaves) {
+    node.max_rank = 0;
+  }
+
+  const reverse_post_order = post_order_ins(leaves).reverse();
+  for (let node of reverse_post_order) {
+    console.assert(node.max_rank !== undefined);
+    const next_rank = node.max_rank + 1;
+    for (let edge of node.in_edges) {
+      const pred = edge.source;
+      if (pred.max_rank === undefined || pred.max_rank < next_rank)
+        pred.max_rank = next_rank;
+    }
+  }
+}
+
+function rank(graph) {
+  compute_min_rank(graph)
+  compute_max_rank(graph)
+  const roots = graph.roots;
+
+  const nodes = post_order(roots);
+  let rank_max = 0;
+  for (let node of nodes) {
+    node.rank = node.min_rank;
+    rank_max = Math.max(rank_max, node.rank)
   }
 
   const ranks = [];
@@ -132,9 +193,7 @@ function rank(roots) {
     ranks.push([]);
 
   const nodelist = [];
-  for (let node of reverse_post_order) {
-    if (node.rank === undefined)
-      node.rank = 0;
+  for (let node of nodes) {
     const rank = node.rank;
     ranks[rank].push(node);
 
@@ -511,6 +570,8 @@ function add_debug_handlers(element, ranking, params) {
           console.log(element);
           console.log(`Id: ${node.id}`);
           console.log(`Rank: ${node.rank}`);
+          console.log(`MinRank: ${node.min_rank}`);
+          console.log(`MaxRank: ${node.max_rank}`);
           console.log(`Order Idx: ${node.order_idx}`);
         };
       }
@@ -530,8 +591,8 @@ export function layout(element, params) {
   if (params.debug_log_on_click === undefined)
     params.debug_log_on_click = true;
 
-  const roots = make_vertices(element);
-  const ranking = rank(roots);
+  const graph = make_graph(element);
+  const ranking = rank(graph);
   order(ranking);
   position(ranking, params);
 
