@@ -285,34 +285,89 @@ function create_ranking(graph) {
   return new Ranking(ranks, rank_max, nodelist)
 }
 
+function wmedian(values) {
+  const length = values.length
+  if (length == 1) {
+    return values[0]
+  }
+  if (length == 2) {
+    return (values[0] + values[1]) / 2
+  }
+  values.sort()
+  const m = Math.trunc(length / 2)
+  if (length % 2 == 1) {
+    return values[m]
+  }
+
+  const idx_m0 = values[m - 1]
+  const idx_m1 = values[m]
+  const left = idx_m0 - values[0]
+  const right = values[length - 1] - idx_m1
+  return (idx_m0*right + idx_m1*left) / (left + right)
+}
+
+function rank_sort(ordered, unordered) {
+  ordered.sort((n0, n1) => (n0.order_idx - n1.order_idx))
+
+  // Combine sorted nodes and unordered ones.
+  const unordered_length = unordered.length
+  const ordered_length = ordered.length
+  const length = unordered_length + ordered_length
+  const result = []
+  let next_unordered = 0
+  let next_ordered = 0
+  for (let i = 0; i < length; i++) {
+    if (next_unordered < unordered_length) {
+      const node = unordered[next_unordered]
+      if (node.order_idx == i) {
+        result.push(node)
+        next_unordered++
+        continue
+      }
+    }
+    result.push(ordered[next_ordered])
+    next_ordered++
+  }
+  console.assert(next_unordered == unordered.length)
+  console.assert(next_ordered == ordered.length)
+  return result
+}
+
 function order_down(ranking) {
   const ranks = ranking.ranks
   const rank_max = ranking.rank_max
 
   let previous_rank_nodes = ranks[0]
   for (let rank = 1; rank <= rank_max; rank++) {
-    let idx = 0
+    let pi = 0
     for (let node of previous_rank_nodes) {
-      node.order_idx = idx++
+      node.order_idx = pi++
     }
 
     const rank_nodes = ranks[rank]
+    const ordered = []
+    const unordered = []
+    let idx = 0
     for (let node of rank_nodes) {
-      let order_val_sum = 0
-      let n_edges = 0
-      for (let edge of node.in_edges) {
-        const prev = edge.source
-        console.assert(prev.rank == rank - 1)
-        let order_val = prev.order_idx
-        if (edge.out_idx > 0)
-          order_val += edge.out_idx / (prev.out_edges.length + 1)
-        order_val_sum += order_val
-        n_edges++
+      const edges = node.in_edges
+      const edges_length = edges.length
+      let order_idx
+      if (edges_length == 0) {
+        node.order_idx = idx
+        unordered.push(node)
+      } else {
+        const connected_indexes = []
+        for (let edge of edges) {
+          const prev = edge.source
+          connected_indexes.push(prev.order_idx)
+        }
+        node.order_idx = wmedian(connected_indexes)
+        ordered.push(node)
       }
-      node.order_idx = n_edges === 0 ? -1 : order_val_sum / n_edges
+      idx++
     }
-    rank_nodes.sort((n0, n1) => (n0.order_idx - n1.order_idx))
-
+    const new_rank_nodes = rank_sort(ordered, unordered)
+    ranks[rank] = new_rank_nodes
     previous_rank_nodes = rank_nodes
   }
 }
@@ -322,34 +377,52 @@ function order_up(ranking) {
   const rank_max = ranking.rank_max
 
   let previous_rank_nodes = ranks[rank_max]
+  //previous_rank_nodes.sort((n0, n1) => (n0.best_order_idx - n1.best_order_idx))
   for (let rank = rank_max - 1; rank >= 0; rank--) {
-    let idx = 0
+    let pi = 0
     for (let node of previous_rank_nodes) {
-      node.order_idx = idx++
+      node.order_idx = pi++
     }
 
     const rank_nodes = ranks[rank]
+    const ordered = []
+    const unordered = []
+    let idx = 0
     for (let node of rank_nodes) {
-      let order_val_sum = 0
-      let n_edges = 0
-      for (let edge of node.out_edges) {
-        const prev = edge.dest
-        console.assert(prev.rank == rank + 1)
-        let order_val = prev.order_idx
-        if (edge.out_idx > 0)
-          order_val += edge.out_idx / (prev.out_edges.length + 1)
-        order_val_sum += order_val
-        n_edges++
+      const edges = node.out_edges
+      const edges_length = edges.length
+      let order_idx
+      if (edges_length == 0) {
+        node.order_idx = idx
+        unordered.push(node)
+      } else {
+        const connected_indexes = []
+        for (let edge of edges) {
+          const prev = edge.dest
+          connected_indexes.push(prev.order_idx)
+        }
+        node.order_idx = wmedian(connected_indexes)
+        ordered.push(node)
       }
-      node.order_idx = n_edges === 0 ? -1 : order_val_sum / n_edges
+      idx++
     }
-    rank_nodes.sort((n0, n1) => (n0.order_idx - n1.order_idx))
-
-    previous_rank_nodes = rank_nodes
+    const new_rank_nodes = rank_sort(ordered, unordered)
+    ranks[rank] = new_rank_nodes
+    previous_rank_nodes = new_rank_nodes
   }
 }
 
-function order(ranking) {
+function minimize_crossings(ranking) {
+  /*
+  for (let rank of ranking.ranks) {
+    let idx = 0
+    for (let node of rank) {
+      node.best_order_idx = idx++
+    }
+  }
+  */
+
+  // Reorders nodes within ranks to minimize edge crossings.
   const num_iterations = 3;
   for (let i = 0; i < num_iterations; i++) {
     order_down(ranking)
@@ -684,7 +757,7 @@ export function layout(element, params) {
   const graph = make_graph(element)
   rank(graph)
   const ranking = create_ranking(graph)
-  order(ranking)
+  minimize_crossings(ranking)
   position(ranking, params)
 
   position_edges(ranking, params)
