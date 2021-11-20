@@ -33,13 +33,13 @@
       </g>
     </svg>
     <script type="module">
-      import { makeBox } from './drawing.mjs';
-      import { layout } from './layout.mjs';
+      import { makeBox } from './drawing.mjs'
+      import { layout } from './layout.mjs'
 
-      document.querySelectorAll('.boxed').forEach(makeBox);
+      document.querySelectorAll('.boxed').forEach(makeBox)
       document.querySelectorAll('svg .layout').forEach(svg => {
-        layout(svg, {ordered_outs: true});
-      });
+        layout(svg, {ordered_outs: true})
+      })
     </script>
   </body>
 </html>
