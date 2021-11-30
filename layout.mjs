@@ -1,3 +1,10 @@
+/* This is the core layout algorithm. Written by reading the paper about
+ * graphviz/dot layouts: https://graphviz.org/documentation/TSE93.pdf
+ *
+ * TODO: We're not really implementing the DOT algorithm, but instead skimp and 
+ * take shortcuts all over the place. For example there is no simplex solver
+ * here...
+ */
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 class Graph {
