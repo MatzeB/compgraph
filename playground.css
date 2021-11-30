@@ -1,0 +1,11 @@
+#settings {
+    position: absolute;
+    top: 10px;
+    right: 25px;
+    width: 155px;
+    background: #e0e0e0;
+}
+
+.setting input[type=text] {
+    width: 40px;
+}

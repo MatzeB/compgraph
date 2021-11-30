@@ -176,7 +176,7 @@ function compute_node_depths(graph) {
   }
 }
 
-function rank(graph) {
+function rank(graph, params) {
   const roots = graph.roots
   if (roots.length == 0)
     return
@@ -194,44 +194,46 @@ function rank(graph) {
     node.rank = node.height
   }
 
-  // Sink nodes with fewer incomding than outgoing edges downwards as much as
-  // possible.
-  const reverse_post_order_ins = post_order_ins(graph.leaves).reverse()
-  for (let node of reverse_post_order_ins) {
-    const in_length = node.in_edges.length
-    const out_length = node.out_edges.length
-    if (in_length < out_length) {
-      let max_rank = rank_max
-      for (let edge of node.out_edges) {
-        const succ = edge.dest
-        max_rank = Math.min(max_rank, succ.rank - 1)
+  if (params.optimize_ranking) {
+    // Sink nodes with fewer incomding than outgoing edges downwards as much as
+    // possible.
+    const reverse_post_order_ins = post_order_ins(graph.leaves).reverse()
+    for (let node of reverse_post_order_ins) {
+      const in_length = node.in_edges.length
+      const out_length = node.out_edges.length
+      if (in_length < out_length) {
+        let max_rank = rank_max
+        for (let edge of node.out_edges) {
+          const succ = edge.dest
+          max_rank = Math.min(max_rank, succ.rank - 1)
+        }
+        node.rank = max_rank
       }
-      node.rank = max_rank
     }
-  }
 
-  // Average rank between min/max for nodes with same amount of incoming and
-  // outgoing edges.
-  for (let node of reverse_post_order_ins) {
-    const in_length = node.in_edges.length
-    const out_length = node.out_edges.length
-    if (in_length == out_length) {
-      let min_rank = 0
-      for (let edge of node.in_edges) {
-        const pred = edge.source
-        min_rank = Math.max(min_rank, pred.rank + 1)
+    // Average rank between min/max for nodes with same amount of incoming and
+    // outgoing edges.
+    for (let node of reverse_post_order_ins) {
+      const in_length = node.in_edges.length
+      const out_length = node.out_edges.length
+      if (in_length == out_length) {
+        let min_rank = 0
+        for (let edge of node.in_edges) {
+          const pred = edge.source
+          min_rank = Math.max(min_rank, pred.rank + 1)
+        }
+        let max_rank = rank_max
+        for (let edge of node.out_edges) {
+          const succ = edge.dest
+          max_rank = Math.min(max_rank, succ.rank - 1)
+        }
+        node.rank = Math.trunc((min_rank + max_rank) / 2)
       }
-      let max_rank = rank_max
-      for (let edge of node.out_edges) {
-        const succ = edge.dest
-        max_rank = Math.min(max_rank, succ.rank - 1)
-      }
-      node.rank = Math.trunc((min_rank + max_rank) / 2)
     }
   }
 }
 
-function create_ranking(graph) {
+function create_ranking(graph, params) {
   const reverse_post_order = post_order(graph.roots).reverse()
   const nodes = reverse_post_order
 
@@ -250,34 +252,36 @@ function create_ranking(graph) {
     const rank = node.rank
     ranks[rank].push(node)
 
-    // Create pseudo nodes for connecting ranks
-    const new_edges = []
-    for (let edge of node.out_edges) {
-      const dest = edge.dest
-      const dest_rank = dest.rank
-      let last = node
-      for (let r = rank+1; r < dest_rank; ++r) {
-        const v = make_pseudo_vertex(r)
-        ranks[r].push(v)
-        nodelist.push(v)
-        const out_edges = last === node ? new_edges : last.out_edges
-        const element = last === node ? edge.element : null
-        const new_edge = new Edge(element, last, v, out_edges.length)
-        out_edges.push(new_edge)
+    if (params.position_edges) {
+      // Create pseudo nodes for connecting ranks
+      const new_edges = []
+      for (let edge of node.out_edges) {
+        const dest = edge.dest
+        const dest_rank = dest.rank
+        let last = node
+        for (let r = rank+1; r < dest_rank; ++r) {
+          const v = make_pseudo_vertex(r)
+          ranks[r].push(v)
+          nodelist.push(v)
+          const out_edges = last === node ? new_edges : last.out_edges
+          const element = last === node ? edge.element : null
+          const new_edge = new Edge(element, last, v, out_edges.length)
+          out_edges.push(new_edge)
 
-        v.in_edges.push(new_edge)
-        last = v
+          v.in_edges.push(new_edge)
+          last = v
+        }
+        if (last === node) {
+          new_edges.push(edge)
+        } else {
+          const new_edge = new Edge(null, last, dest, last.out_edges.length)
+          dest.in_edges = dest.in_edges.filter(e => e !== edge)
+          dest.in_edges.push(new_edge)
+          last.out_edges.push(new_edge)
+        }
       }
-      if (last === node) {
-        new_edges.push(edge)
-      } else {
-        const new_edge = new Edge(null, last, dest, last.out_edges.length)
-        dest.in_edges = dest.in_edges.filter(e => e !== edge)
-        dest.in_edges.push(new_edge)
-        last.out_edges.push(new_edge)
-      }
+      node.out_edges = new_edges
     }
-    node.out_edges = new_edges
 
     nodelist.push(node)
   }
@@ -412,7 +416,8 @@ function order_up(ranking) {
   }
 }
 
-function minimize_crossings(ranking) {
+function minimize_crossings(graph, params) {
+  const ranking = create_ranking(graph, params)
   /*
   for (let rank of ranking.ranks) {
     let idx = 0
@@ -422,12 +427,15 @@ function minimize_crossings(ranking) {
   }
   */
 
-  // Reorders nodes within ranks to minimize edge crossings.
-  const num_iterations = 3;
-  for (let i = 0; i < num_iterations; i++) {
-    order_down(ranking)
-    order_up(ranking)
+  if (params.reduce_crossings) {
+    // Reorders nodes within ranks to minimize edge crossings.
+    const num_iterations = 3;
+    for (let i = 0; i < num_iterations; i++) {
+      order_down(ranking)
+      order_up(ranking)
+    }
   }
+  return ranking
 }
 
 function initial_placement(ranking, params) {
@@ -558,7 +566,9 @@ function position(ranking, params) {
     cycle_up(ranking, params)
     cycle_down(ranking, params)
   }
+}
 
+function apply_vertex_positions(ranking) {
   // Apply
   for (let rank_nodes of ranking.ranks) {
     console.assert(rank_nodes.length > 0)
@@ -677,14 +687,6 @@ function draw_edges(ranking, params) {
   for (let rank_nodes of ranking.ranks) {
     for (let node of rank_nodes) {
       if (!node.element) {
-        if (params.debug_draw) {
-          const circ = document.createElementNS(SVGNS, 'circle')
-          circ.setAttribute('cx', node.x)
-          circ.setAttribute('cy', node.y)
-          circ.setAttribute('r', 3)
-          circ.setAttribute('fill', 'red')
-          params.debug_draw.appendChild(circ)
-        }
         continue
       }
 
@@ -722,6 +724,23 @@ function draw_edges(ranking, params) {
   }
 }
 
+function draw_simple_edges(ranking) {
+  for (let rank_nodes of ranking.ranks) {
+    for (let node of rank_nodes) {
+      if (!node.element) {
+        continue
+      }
+
+      for (let edge of node.out_edges) {
+        const element = edge.element
+        console.assert(element)
+        const path_data = `M${edge.source.x},${edge.source.y}L${edge.dest.x},${edge.dest.y}`
+        element.setAttribute('d', path_data)
+      }
+    }
+  }
+}
+
 function add_debug_handlers(element, ranking, params) {
   if (params.debug_log_on_click) {
     for (let node of ranking.nodelist) {
@@ -749,19 +768,49 @@ export function layout(element, params) {
     params.spacing_x = 15
   if (params.spacing_y === undefined)
     params.spacing_y = 35
-  if (params.debug_draw === undefined)
-    params.debug_draw = element
   if (params.debug_log_on_click === undefined)
     params.debug_log_on_click = true
+  if (params.optimize_ranking === undefined)
+    params.optimize_ranking = true
+  if (params.position_vertices === undefined)
+    params.position_vertices = true
+  if (params.position_edges === undefined)
+    params.position_edges = true
+  if (params.reduce_crossings === undefined)
+    params.reduce_crossings = true
 
   const graph = make_graph(element)
-  rank(graph)
-  const ranking = create_ranking(graph)
-  minimize_crossings(ranking)
-  position(ranking, params)
+  rank(graph, params)
+  const ranking = minimize_crossings(graph, params)
 
-  position_edges(ranking, params)
-  draw_edges(ranking, params)
+  if (params.position_vertices) {
+    position(ranking, params)
+  } else {
+    initial_placement(ranking, params);
+  }
+  apply_vertex_positions(ranking)
+
+  if (params.position_edges) {
+    position_edges(ranking, params)
+    draw_edges(ranking, params)
+  } else {
+    draw_simple_edges(ranking)
+  }
+
+  if (params.debug_draw) {
+    for (let rank_nodes of ranking.ranks) {
+      for (let node of rank_nodes) {
+        if (!node.element) {
+          const circ = document.createElementNS(SVGNS, 'circle')
+          circ.setAttribute('cx', node.x)
+          circ.setAttribute('cy', node.y)
+          circ.setAttribute('r', 3)
+          circ.setAttribute('fill', 'red')
+          params.debug_draw.appendChild(circ)
+        }
+      }
+    }
+  }
 
   add_debug_handlers(element, ranking, params)
 }
