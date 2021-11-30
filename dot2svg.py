@@ -26,14 +26,14 @@ def ident(keywords, scanner, value):
         return Token(value)
     return Token('ident', value)
 
-keywords = set(["digraph", "size"])
+keywords = set(["digraph", "size", "rankdir", "label"])
 rules = [
     (r'[a-zA-Z_][a-zA-Z0-9_]*', lambda s, v: ident(keywords, s, v)),
     (r'->', token),
     (r'/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/', skip),
     (r'\s+', skip),
     (r'"[^"]*"', lambda _, value: Token('string', value)),
-    ('[;{}=]', token),
+    ('[\[\];{}=,]', token),
 ]
 
 def scan(rules, string):
@@ -46,6 +46,7 @@ def scan(rules, string):
 class Vertex:
     def __init__(self, name):
         self.name = name
+        self.label = name
 
 class Edge:
     def __init__(self, src, dst):
@@ -65,7 +66,7 @@ def parse_error(msg):
     sys.stderr.write(f"Error: {msg}\n")
 
 def parse_error_expect(*kinds):
-    parse_error(f"Expected {'or '.join(kinds)}, got {t.kind}")
+    parse_error(f"Expected {' or '.join(kinds)}, got {t.kind}")
 
 EOF = Token("EOF")
 def next():
@@ -94,18 +95,36 @@ def parse_name():
     if t.kind == 'ident':
         result = t.value
         next()
-        return result
     elif t.kind == 'string':
         result = t.value
         next()
-        return result
+    elif t.kind in keywords:
+        result = t.kind
+        next()
     else:
         parse_error_expect('ident', 'string')
+        result = "$invalid$"
+    return result
 
 def skip_attr():
     next()
     expect('=')
     expect('string')
+
+def parse_attributes():
+    expect('[')
+    result = {}
+    first = True
+    while not match(']') and t.kind not in (EOF, "Error"):
+        if not first:
+            expect(",")
+        first = False
+            
+        name = parse_name()
+        expect('=')
+        value = parse_name()
+        result[name] = value
+    return result
 
 def parse_vertex():
     name = parse_name()
@@ -116,18 +135,20 @@ def parse_vertex():
         vertices[name] = vertex
     return vertex
 
-def parse_edge():
-    src = parse_vertex()
-    expect('->')
-    dst = parse_vertex()
-
-    edges.append(Edge(src, dst))
-
 def parse_graph_statement():
-    if t.kind == 'size':
+    if t.kind in ('size', 'rankdir', 'label'):
         return skip_attr()
-    return parse_edge()
-
+    v = parse_vertex()
+    edge = None
+    if match('->'):
+        v2 = parse_vertex()
+        edge = Edge(v, v2)
+        edges.append(edge)
+    if t.kind == '[':
+        attrs = parse_attributes()
+        label = attrs.get("label")
+        if edge is None:
+            v.label = label
 
 def parse_digraph():
     expect('digraph')
@@ -162,7 +183,7 @@ def write_svg(out):
 
     out.write('<g class="layout">\n')
     for v in vertices.values():
-        out.write(f'  <text id="{v.id}">{v.name}</text>\n')
+        out.write(f'  <text id="{v.id}">{v.label}</text>\n')
     out.write('\n')
     for e in edges:
         out.write(f'  <path class="edge" src="{e.src.id}" dst="{e.dst.id}"/>\n')
