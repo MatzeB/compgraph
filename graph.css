@@ -1,0 +1,28 @@
+.back {
+  fill: #b2dfee;
+  stroke: none;
+}
+g text {
+  text-anchor: middle;
+  alignment-baseline: middle;
+  font-family: Verdana, Arial, sans-serif;
+  font-size: 15px;
+  fill: black;
+}
+.edge {
+  stroke: black;
+  marker-end: url(#arrow);
+  fill: none;
+}
+.mouseover_edge {
+  stroke: red;
+  stroke-width: 3;
+  stroke-dasharray: 10;
+  animation: dash 1s linear;
+  animation-iteration-count: infinite;
+}
+@keyframes dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
