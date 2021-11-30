@@ -64,7 +64,10 @@
   <path class="edge" src="v16" dst="v1"/>
 
 </g>
-  <foreignObject class="info hidden" id="info.v0">
+
+  <!-- Short of having a real LLVM dumper, just add info boxes for 3 nodes
+       as an example -->
+  <foreignObject class="info hidden" id="v0-info" x=245 y=380>
     <div xmlns="http://www.w3.org/1999/xhtml" class="infobox">
       %0:gr64 = COPY $rdi<br/>
       SU(0)<br/>
@@ -75,9 +78,9 @@
     </div>
   </foreignObject>
 
-  <foreignObject class="info hidden" id="info.v12">
+  <foreignObject class="info hidden" id="v12-info" x=480 y=300>
     <div xmlns="http://www.w3.org/1999/xhtml" class="infobox">
-      %12.sub_32bit:gr64_nosp = ADD32rm %12.sub_32bit:gr64_nosp(tied-def 0), %0:gr64, 1, $noreg, 0, $noreg, implicit-def dead $eflags :: (load (s32) from %ir.0, !tbaa !4)<br/>
+      %12.sub_32bit:gr64_nosp = ADD32rm %12.sub_32bit:gr64_nosp(tied-def 0), %0:gr64, 1, $noreg, 0, $noreg, implicit-def dead $eflags<br/>
       SU(12)<br/>
       Latency 6<br/>
       Depth 5<br/>
@@ -86,7 +89,16 @@
     </div>
   </foreignObject>
 
-
+  <foreignObject class="info hidden" id="v16-info" x=250 y=0>
+    <div xmlns="http://www.w3.org/1999/xhtml" class="infobox">
+      MOV32mr %1:gr64, 1, $noreg, 0, $noreg, %18:gr32<br/>
+      SU(16)<br/>
+      Latency 1<br/>
+      Depth 17<br/>
+      Height 0<br/>
+      Pressure Diff GR16 4
+    </div>
+  </foreignObject>
 
     </svg>
 
@@ -107,6 +119,40 @@
         element.onmouseout = () => {
           element.classList.remove("mouseover_edge");
         };
+      });
+
+      document.querySelectorAll('svg').forEach(svg => {
+        svg.addEventListener('click', (event) => {
+          console.log(`Clicked on:`)
+          let target = event.target
+          while (target != null && !target.classList.contains("vertex")) {
+            target = target.parentElement
+          }
+          if (target != null) {
+            document.querySelectorAll(`#${target.id}-info`).forEach(info => {
+              if (info.classList.contains("hidden")) {
+                info.classList.remove("hidden");
+              } else {
+                info.classList.add("hidden");
+              }
+              const bbox = target.getBBox()
+              const CTM = target.getCTM()
+              const point = svg.createSVGPoint()
+              point.x = bbox.x + bbox.width
+              point.y = bbox.y
+              point.matrixTransform(CTM)
+              point.x += 10
+              console.log(bbox)
+              console.log(point)
+              // TODO: I cant get the positioning of the box next to the node
+              // to work right now... So I just hardcoded x/y value for the
+              // demo :-/
+              //info.setAttribute("x", point.x)
+              //info.setAttribute("y", point.y)
+            });
+            console.log(target)
+          }
+        });
       });
     </script>
   </body>

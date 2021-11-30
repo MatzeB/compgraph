@@ -14,6 +14,7 @@ export function makeBox(node) {
       rect.setAttribute(attrib.name, attrib.value)
     }
   }
+  g.classList.add("vertex")
   node.replaceWith(g)
   g.appendChild(node)
 

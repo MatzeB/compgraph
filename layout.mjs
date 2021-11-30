@@ -812,7 +812,7 @@ export function layout(element, params) {
     }
   }
 
-  add_debug_handlers(element, ranking, params)
+  //add_debug_handlers(element, ranking, params)
 }
 
 export default { layout }
