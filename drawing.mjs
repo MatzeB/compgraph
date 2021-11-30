@@ -17,10 +17,10 @@ export function makeBox(node) {
   node.replaceWith(g);
   g.appendChild(node);
 
-  const i_left = 10;
-  const i_right = 10;
-  const i_top = 5;
-  const i_bottom = 5;
+  const i_left = 20;
+  const i_right = 20;
+  const i_top = 10;
+  const i_bottom = 10;
 
   const bbox = g.getBBox();
   rect.setAttribute('class', 'back');

@@ -1,0 +1,113 @@
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <link rel="stylesheet" href="graph_sched.css">
+  </head>
+  <body>
+    <!-- imported layout.svg here (is there a better way?) -->
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="0" height="0">
+      <defs>
+        <marker id="arrow" refX="10" refY="5"
+                markerWidth="10" markerHeight="10" orient="auto-start-reverse"
+                markerUnits="userSpaceOnUse">
+          <path d="M0,0 L10,5 L0,10 L2.5,5 z"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <svg width="1000" height="700" viewBox="-100 0 1500 700" id="canvas">
+<g class="layout">
+  <text id="v0"> COPY</text>
+  <text id="v1"> MOV64rm</text>
+  <text id="v2"> MOV32rm</text>
+  <text id="v3"> MOV64rm</text>
+  <text id="v4"> MOV32rm</text>
+  <text id="v5"> MOV64rm</text>
+  <text id="v6"> MOV64rm</text>
+  <text id="v7"> MOV32rm</text>
+  <text id="v8"> MOV32rm</text>
+  <text id="v9"> XOR32rr</text>
+  <text id="v10">AND32rr</text>
+  <text id="v11">XOR32rr</text>
+  <text id="v12">ADD32rm</text>
+  <text id="v13">LEA64_32r</text>
+  <text id="v14">ROL32ri</text>
+  <text id="v15">ADD32rr</text>
+  <text id="v16">MOV32mr</text>
+
+  <path class="edge" src="v2" dst="v1"/>
+  <path class="edge" src="v4" dst="v3"/>
+  <path class="edge" src="v7" dst="v6"/>
+  <path class="edge" src="v8" dst="v5"/>
+  <path class="edge" src="v9" dst="v8"/>
+  <path class="edge" src="v9" dst="v8"/>
+  <path class="edge" src="v9" dst="v7"/>
+  <path class="edge" src="v10" dst="v9"/>
+  <path class="edge" src="v10" dst="v9"/>
+  <path class="edge" src="v10" dst="v4"/>
+  <path class="edge" src="v11" dst="v10"/>
+  <path class="edge" src="v11" dst="v10"/>
+  <path class="edge" src="v11" dst="v7"/>
+  <path class="edge" src="v12" dst="v2"/>
+  <path class="edge" src="v12" dst="v2"/>
+  <path class="edge" src="v12" dst="v0"/>
+  <path class="edge" src="v13" dst="v11"/>
+  <path class="edge" src="v13" dst="v12"/>
+  <path class="edge" src="v14" dst="v13"/>
+  <path class="edge" src="v14" dst="v13"/>
+  <path class="edge" src="v15" dst="v14"/>
+  <path class="edge" src="v15" dst="v14"/>
+  <path class="edge" src="v15" dst="v4"/>
+  <path class="edge" src="v16" dst="v15"/>
+  <path class="edge" src="v16" dst="v12"/>
+  <path class="edge" src="v16" dst="v2"/>
+  <path class="edge" src="v16" dst="v1"/>
+
+</g>
+  <foreignObject class="info hidden" id="info.v0">
+    <div xmlns="http://www.w3.org/1999/xhtml" class="infobox">
+      %0:gr64 = COPY $rdi<br/>
+      SU(0)<br/>
+      Latency 0<br/>
+      Depth 0<br/>
+      Height 10<br/>
+      Pressure Diff GR32_BPSP 1
+    </div>
+  </foreignObject>
+
+  <foreignObject class="info hidden" id="info.v12">
+    <div xmlns="http://www.w3.org/1999/xhtml" class="infobox">
+      %12.sub_32bit:gr64_nosp = ADD32rm %12.sub_32bit:gr64_nosp(tied-def 0), %0:gr64, 1, $noreg, 0, $noreg, implicit-def dead $eflags :: (load (s32) from %ir.0, !tbaa !4)<br/>
+      SU(12)<br/>
+      Latency 6<br/>
+      Depth 5<br/>
+      Height 10<br/>
+      Pressure Diff GR16 2
+    </div>
+  </foreignObject>
+
+
+
+    </svg>
+
+    <script type="module">
+      import { makeBox } from './drawing.mjs';
+      import { layout } from './layout.mjs';
+
+      document.querySelectorAll('svg .layout text').forEach(makeBox);
+      document.querySelectorAll('svg .layout').forEach(svg => {
+        layout(svg);
+      });
+
+      document.querySelectorAll('svg .edge').forEach(element => {
+        element.onmouseover = () => {
+          if (!element.classList.contains("mouseover_edge"))
+            element.classList.add("mouseover_edge");
+        };
+        element.onmouseout = () => {
+          element.classList.remove("mouseover_edge");
+        };
+      });
+    </script>
+  </body>
+</html>
