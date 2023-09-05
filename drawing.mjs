@@ -62,4 +62,16 @@ export function makeEllipse(node) {
   ellipse.setAttribute('ry', ry)
 }
 
-export default { makeBox, makeEllipse }
+export function vlayout(node) {
+  let y = 0;
+  for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i];
+    if (y != 0) {
+      child.setAttribute('transform', `translate(0 ${y})`)
+    }
+    const bbox = child.getBBox();
+    y += bbox.height + 2;
+  }
+}
+
+export default { makeBox, makeEllipse, vlayout }
