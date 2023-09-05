@@ -1,0 +1,14 @@
+    <script type="module">
+      import { makeBox, vlayout } from './drawing.mjs'
+      import { layout } from './layout.mjs'
+      import { Manipulator } from './manipulator.mjs'
+        
+      document.querySelectorAll('svg .layout .vlayout').forEach(vlayout)
+      document.querySelectorAll('svg .layout > g, svg .layout > text').forEach(makeBox)
+      document.querySelectorAll('svg .layout').forEach(svg => {
+        layout(svg)
+        new Manipulator(svg)
+      })
+    </script>
+  </body>
+</html>
