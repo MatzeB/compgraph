@@ -74,4 +74,12 @@ export function vlayout(node) {
   }
 }
 
-export default { makeBox, makeEllipse, vlayout }
+export function fit_contents(node) {
+  console.assert(node.nodeName == "svg")
+  const bbox = node.getBBox()
+  node.setAttribute("width", bbox.width)
+  node.setAttribute("height", bbox.height)
+  node.setAttribute("viewBox", `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`)
+}
+
+export default { makeBox, makeEllipse, vlayout, fit_contents }

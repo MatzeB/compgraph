@@ -4,7 +4,7 @@ import sys
 
 def func_begin(out, name):
     out.write(f"\n<h2>{name}</h2>\n")
-    out.write("<svg width=\"800\" height=\"800\" viewBox=\"0 0 800 800\">\n")
+    out.write("<svg class=\"fit_contents\">\n")
     out.write("<g class=\"layout\">\n")
 
 def func_end(out, nodes, edges, branches):
