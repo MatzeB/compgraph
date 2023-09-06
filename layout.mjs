@@ -98,6 +98,7 @@ function make_graph(element) {
     if (v.out_edges.length === 0)
       leaves.push(v)
   }
+
   return new Graph(roots, leaves)
 }
 
@@ -183,6 +184,10 @@ function compute_node_depths(graph) {
   }
 }
 
+function is_backedge(edge) {
+  return edge.source.rank >= edge.dest.rank
+}
+
 function rank(graph, params) {
   const roots = graph.roots
   if (roots.length == 0)
@@ -206,11 +211,22 @@ function rank(graph, params) {
     // possible.
     const reverse_post_order_ins = post_order_ins(graph.leaves).reverse()
     for (let node of reverse_post_order_ins) {
-      const in_length = node.in_edges.length
-      const out_length = node.out_edges.length
+      let in_length = 0
+      for (let edge of node.in_edges) {
+        if (!is_backedge(edge))
+          in_length++
+      }
+      let out_length = 0
+      for (let edge of node.in_edges) {
+        if (!is_backedge(edge))
+          out_length++
+      }
+
       if (in_length < out_length) {
         let max_rank = rank_max
         for (let edge of node.out_edges) {
+          if (is_backedge(edge))
+            continue
           const succ = edge.dest
           max_rank = Math.min(max_rank, succ.rank - 1)
         }
@@ -221,16 +237,29 @@ function rank(graph, params) {
     // Average rank between min/max for nodes with same amount of incoming and
     // outgoing edges.
     for (let node of reverse_post_order_ins) {
-      const in_length = node.in_edges.length
-      const out_length = node.out_edges.length
+      let in_length = 0
+      for (let edge of node.in_edges) {
+        if (!is_backedge(edge))
+          in_length++
+      }
+      let out_length = 0
+      for (let edge of node.in_edges) {
+        if (!is_backedge(edge))
+          out_length++
+      }
+
       if (in_length == out_length) {
         let min_rank = 0
         for (let edge of node.in_edges) {
+          if (is_backedge(edge))
+            continue
           const pred = edge.source
           min_rank = Math.max(min_rank, pred.rank + 1)
         }
         let max_rank = rank_max
         for (let edge of node.out_edges) {
+          if (is_backedge(edge))
+            continue
           const succ = edge.dest
           max_rank = Math.min(max_rank, succ.rank - 1)
         }
@@ -457,10 +486,9 @@ function initial_placement(ranking, params) {
     for (let node of rank_nodes) {
       if (x > 0) {
         x += spacing_x
-        x += node.bbox.width / 2
       }
       node.x = x
-      x += node.bbox.width / 2
+      x += node.bbox.width
 
       min_y = Math.min(min_y, node.bbox.y)
       max_y = Math.max(max_y, node.bbox.y + node.bbox.height)
@@ -640,7 +668,10 @@ function position_edges(ranking, params) {
 
         edge.out_x = out_x
         edge.out_y = out_y
-        console.assert(edge.out_y < edge.in_y)
+        if (edge.out_y >= edge.in_y) {
+          console.log(`backedge layout not implemented yet`, edge)
+          continue
+        }
         edges.push(edge)
       }
     }
@@ -699,7 +730,11 @@ function draw_edges(ranking, params) {
 
       for (let edge of node.out_edges) {
         const element = edge.element
-        console.assert(element)
+        if (element === undefined || edge.out_x === undefined
+          || edge.out_y === undefined || edge.half_height === undefined) {
+          console.log(`invalid edge`, edge)
+          continue
+        }
 
         let path_data = `M${edge.out_x},${edge.out_y}`
         let current_edge = edge
@@ -741,6 +776,10 @@ function draw_simple_edges(ranking) {
       for (let edge of node.out_edges) {
         const element = edge.element
         console.assert(element)
+        if (edge.source === undefined || edge.dest === undefined) {
+          console.log(`invalid edge: ${edge}`)
+          continue
+        }
         const path_data = `M${edge.source.x},${edge.source.y}L${edge.dest.x},${edge.dest.y}`
         element.setAttribute('d', path_data)
       }
@@ -774,7 +813,7 @@ export function layout(element, params) {
   if (params.spacing_x === undefined)
     params.spacing_x = 15
   if (params.spacing_y === undefined)
-    params.spacing_y = 35
+    params.spacing_y = 20
   if (params.debug_log_on_click === undefined)
     params.debug_log_on_click = true
   if (params.optimize_ranking === undefined)
