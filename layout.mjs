@@ -223,7 +223,7 @@ function assign_ranks(graph, params) {
           in_length++
       }
       let out_length = 0
-      for (const edge of node.in_edges) {
+      for (const edge of node.out_edges) {
         if (!is_backedge(edge))
           out_length++
       }
@@ -249,7 +249,7 @@ function assign_ranks(graph, params) {
           in_length++
       }
       let out_length = 0
-      for (const edge of node.in_edges) {
+      for (const edge of node.out_edges) {
         if (!is_backedge(edge))
           out_length++
       }
