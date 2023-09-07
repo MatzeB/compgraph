@@ -52,8 +52,7 @@ function make_pseudo_vertex(rank) {
 function make_graph(element) {
   const vertices = new Map()
   // Create vertices.
-  for (let i = 0; i < element.children.length; i++) {
-    const child = element.children[i]
+  for (const child of element.children) {
     if (child.hasAttribute('id') && child.getAttribute('class') !== 'edge') {
       const vertex = make_vertex(child)
       const id = child.getAttribute('id')
@@ -62,8 +61,7 @@ function make_graph(element) {
     }
   }
   // Create edges.
-  for (let i = 0; i < element.children.length; i++) {
-    const child = element.children[i]
+  for (const child of element.children) {
     if (child.getAttribute('class') !== 'edge')
       continue
     if (child.nodeName !== 'path') {
@@ -92,7 +90,7 @@ function make_graph(element) {
 
   const roots = []
   const leaves = []
-  for (let v of vertices.values()) {
+  for (const v of vertices.values()) {
     if (v.in_edges.length === 0)
       roots.push(v)
     if (v.out_edges.length === 0)
@@ -106,7 +104,7 @@ function walk_step(node, visited, result) {
   if (visited.has(node))
     return
   visited.add(node)
-  for (let edge of node.out_edges) {
+  for (const edge of node.out_edges) {
     walk_step(edge.dest, visited, result)
   }
   result.push(node)
@@ -115,7 +113,7 @@ function walk_step(node, visited, result) {
 function post_order(roots) {
   const result = []
   const visited = new Set()
-  for (let node of roots) {
+  for (const node of roots) {
     walk_step(node, visited, result)
   }
   return result
@@ -125,7 +123,7 @@ function walk_step_ins(node, visited, result) {
   if (visited.has(node))
     return
   visited.add(node)
-  for (let edge of node.in_edges) {
+  for (const edge of node.in_edges) {
     walk_step_ins(edge.source, visited, result)
   }
   result.push(node)
@@ -134,7 +132,7 @@ function walk_step_ins(node, visited, result) {
 function post_order_ins(leaves) {
   const result = []
   const visited = new Set()
-  for (let node of leaves) {
+  for (const node of leaves) {
     walk_step_ins(node, visited, result)
   }
   return result
@@ -150,33 +148,41 @@ class Ranking {
 
 function compute_node_heights(graph) {
   const roots = graph.roots
-  for (let node of roots) {
-    node.height = 0
+  for (const node of roots) {
+    node.height = -0
   }
 
+  // Walk in reverse post order. We can have cycles/backedges in the graph so
+  // we use `height >= 0` to mark already visited nodes that should not
+  // change their heights anymore.
   const reverse_post_order = post_order(roots).reverse()
-  for (let node of reverse_post_order) {
+  console.log("rpo", reverse_post_order)
+  for (const node of reverse_post_order) {
     console.assert(node.height !== undefined)
-    const next_rank = node.height + 1
-    for (let edge of node.out_edges) {
+    node.height = -node.height
+    const min_succ_height = -node.height - 1
+    for (const edge of node.out_edges) {
       const succ = edge.dest
-      if (succ.height === undefined || succ.height < next_rank)
-        succ.height = next_rank
+      const succ_height = succ.height
+      if (succ_height === undefined ||
+          (succ_height <= 0 && min_succ_height < succ_height)) {
+        succ.height = min_succ_height
+      }
     }
   }
 }
 
 function compute_node_depths(graph) {
   const leaves = graph.leaves
-  for (let node of leaves) {
+  for (const node of leaves) {
     node.depth = 0
   }
 
   const reverse_post_order = post_order_ins(leaves).reverse()
-  for (let node of reverse_post_order) {
+  for (const node of reverse_post_order) {
     console.assert(node.depth !== undefined)
     const next_rank = node.depth + 1
-    for (let edge of node.in_edges) {
+    for (const edge of node.in_edges) {
       const pred = edge.source
       if (pred.depth === undefined || pred.depth < next_rank)
         pred.depth = next_rank
@@ -188,7 +194,7 @@ function is_backedge(edge) {
   return edge.source.rank >= edge.dest.rank
 }
 
-function rank(graph, params) {
+function assign_ranks(graph, params) {
   const roots = graph.roots
   if (roots.length == 0)
     return
@@ -201,7 +207,7 @@ function rank(graph, params) {
   // Compute rank_max and put nodes to minimum rank allowed by topological
   // order.
   let rank_max = 0
-  for (let node of nodes) {
+  for (const node of nodes) {
     rank_max = Math.max(rank_max, node.height)
     node.rank = node.height
   }
@@ -210,21 +216,21 @@ function rank(graph, params) {
     // Sink nodes with fewer incomding than outgoing edges downwards as much as
     // possible.
     const reverse_post_order_ins = post_order_ins(graph.leaves).reverse()
-    for (let node of reverse_post_order_ins) {
+    for (const node of reverse_post_order_ins) {
       let in_length = 0
-      for (let edge of node.in_edges) {
+      for (const edge of node.in_edges) {
         if (!is_backedge(edge))
           in_length++
       }
       let out_length = 0
-      for (let edge of node.in_edges) {
+      for (const edge of node.in_edges) {
         if (!is_backedge(edge))
           out_length++
       }
 
       if (in_length < out_length) {
         let max_rank = rank_max
-        for (let edge of node.out_edges) {
+        for (const edge of node.out_edges) {
           if (is_backedge(edge))
             continue
           const succ = edge.dest
@@ -236,28 +242,28 @@ function rank(graph, params) {
 
     // Average rank between min/max for nodes with same amount of incoming and
     // outgoing edges.
-    for (let node of reverse_post_order_ins) {
+    for (const node of reverse_post_order_ins) {
       let in_length = 0
-      for (let edge of node.in_edges) {
+      for (const edge of node.in_edges) {
         if (!is_backedge(edge))
           in_length++
       }
       let out_length = 0
-      for (let edge of node.in_edges) {
+      for (const edge of node.in_edges) {
         if (!is_backedge(edge))
           out_length++
       }
 
       if (in_length == out_length) {
         let min_rank = 0
-        for (let edge of node.in_edges) {
+        for (const edge of node.in_edges) {
           if (is_backedge(edge))
             continue
           const pred = edge.source
           min_rank = Math.max(min_rank, pred.rank + 1)
         }
         let max_rank = rank_max
-        for (let edge of node.out_edges) {
+        for (const edge of node.out_edges) {
           if (is_backedge(edge))
             continue
           const succ = edge.dest
@@ -274,7 +280,7 @@ function create_ranking(graph, params) {
   const nodes = reverse_post_order
 
   let rank_max = 0
-  for (let node of nodes) {
+  for (const node of nodes) {
     rank_max = Math.max(rank_max, node.rank)
   }
 
@@ -284,14 +290,14 @@ function create_ranking(graph, params) {
   }
 
   const nodelist = []
-  for (let node of reverse_post_order) {
+  for (const node of reverse_post_order) {
     const rank = node.rank
     ranks[rank].push(node)
 
     if (params.position_edges) {
       // Create pseudo nodes for connecting ranks
       const new_edges = []
-      for (let edge of node.out_edges) {
+      for (const edge of node.out_edges) {
         const dest = edge.dest
         const dest_rank = dest.rank
         let last = node
@@ -380,7 +386,7 @@ function order_down(ranking) {
   let previous_rank_nodes = ranks[0]
   for (let rank = 1; rank <= rank_max; rank++) {
     let pi = 0
-    for (let node of previous_rank_nodes) {
+    for (const node of previous_rank_nodes) {
       node.order_idx = pi++
     }
 
@@ -388,7 +394,7 @@ function order_down(ranking) {
     const ordered = []
     const unordered = []
     let idx = 0
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       const edges = node.in_edges
       const edges_length = edges.length
       let order_idx
@@ -397,7 +403,7 @@ function order_down(ranking) {
         unordered.push(node)
       } else {
         const connected_indexes = []
-        for (let edge of edges) {
+        for (const edge of edges) {
           const prev = edge.source
           connected_indexes.push(prev.order_idx)
         }
@@ -420,7 +426,7 @@ function order_up(ranking) {
   //previous_rank_nodes.sort((n0, n1) => (n0.best_order_idx - n1.best_order_idx))
   for (let rank = rank_max - 1; rank >= 0; rank--) {
     let pi = 0
-    for (let node of previous_rank_nodes) {
+    for (const node of previous_rank_nodes) {
       node.order_idx = pi++
     }
 
@@ -428,7 +434,7 @@ function order_up(ranking) {
     const ordered = []
     const unordered = []
     let idx = 0
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       const edges = node.out_edges
       const edges_length = edges.length
       let order_idx
@@ -437,7 +443,7 @@ function order_up(ranking) {
         unordered.push(node)
       } else {
         const connected_indexes = []
-        for (let edge of edges) {
+        for (const edge of edges) {
           const prev = edge.dest
           connected_indexes.push(prev.order_idx)
         }
@@ -455,9 +461,9 @@ function order_up(ranking) {
 function minimize_crossings(graph, params) {
   const ranking = create_ranking(graph, params)
   /*
-  for (let rank of ranking.ranks) {
+  for (const rank of ranking.ranks) {
     let idx = 0
-    for (let node of rank) {
+    for (const node of rank) {
       node.best_order_idx = idx++
     }
   }
@@ -479,11 +485,11 @@ function initial_placement(ranking, params) {
   const spacing_y = params.spacing_y
 
   let y = 0
-  for (let rank_nodes of ranking.ranks) {
+  for (const rank_nodes of ranking.ranks) {
     let x = 0
     let min_y = 0
     let max_y = 0
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       if (x > 0) {
         x += spacing_x
       }
@@ -497,7 +503,7 @@ function initial_placement(ranking, params) {
     y += spacing_y
     y += -min_y
 
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       node.y = y
     }
 
@@ -522,11 +528,11 @@ function cycle_up(ranking, params) {
     console.assert(rank_nodes.length > 0)
 
     let last_node
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       const x_pos = []
       const source = node
       const spacing_out_x = source.bbox.width / (node.out_edges.length + 1)
-      for (let edge of node.out_edges) {
+      for (const edge of node.out_edges) {
         const dest = edge.dest
 
         const dest_classify = dest.in_edges.length - dest.out_edges.length
@@ -563,11 +569,11 @@ function cycle_down(ranking, params) {
     console.assert(rank_nodes.length > 0)
 
     let last_node
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       const x_pos = []
       const dest = node
       const dest_offset = -dest.bbox.x -0.5*dest.bbox.width
-      for (let edge of node.in_edges) {
+      for (const edge of node.in_edges) {
         const source = edge.source
 
         const source_classify = source.in_edges.length - source.out_edges.length
@@ -605,10 +611,10 @@ function position(ranking, params) {
 
 function apply_vertex_positions(ranking) {
   // Apply
-  for (let rank_nodes of ranking.ranks) {
+  for (const rank_nodes of ranking.ranks) {
     console.assert(rank_nodes.length > 0)
 
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       if (node.element) {
         const x = node.x
         const y = node.y
@@ -625,8 +631,8 @@ function position_edges(ranking, params) {
   const ranks = ranking.ranks
 
   // Determine edge positions on node inputs.
-  for (let rank_nodes of ranks) {
-    for (let node of rank_nodes) {
+  for (const rank_nodes of ranks) {
+    for (const node of rank_nodes) {
       if (!params.ordered_ins) {
         node.in_edges.sort((e0, e1) => {
           const source0 = e0.source
@@ -641,7 +647,7 @@ function position_edges(ranking, params) {
       const in_y = node.bbox.y
       const spacing = bbox.width / (node.in_edges.length + 1)
       let in_x = bbox.x
-      for (let edge of node.in_edges) {
+      for (const edge of node.in_edges) {
         in_x += spacing
         edge.in_x = in_x
         edge.in_y = in_y
@@ -649,11 +655,11 @@ function position_edges(ranking, params) {
     }
   }
 
-  for (let rank_nodes of ranks) {
+  for (const rank_nodes of ranks) {
     const edges = []
 
     // Determine edge positions on node outputs.
-    for (let node of rank_nodes) {
+    for (const node of rank_nodes) {
       if (!params.ordered_outs) {
         node.out_edges.sort((e0, e1) => {
           return e0.in_x - e1.in_x
@@ -663,7 +669,7 @@ function position_edges(ranking, params) {
       const out_y = node.bbox.y + node.bbox.height
       const spacing = node.bbox.width / (node.out_edges.length + 1)
       let out_x = node.bbox.x
-      for (let edge of node.out_edges) {
+      for (const edge of node.out_edges) {
         out_x += spacing
 
         edge.out_x = out_x
@@ -682,7 +688,7 @@ function position_edges(ranking, params) {
     // Assign heights trying to give parallel edges different levels.
     let min_y = -10000
     let max_y = 10000
-    for (let edge of edges) {
+    for (const edge of edges) {
       edge.begin = Math.min(edge.out_x, edge.in_x) - non_overlap_slack_x
       edge.end = Math.max(edge.out_x, edge.in_x) + non_overlap_slack_x
       min_y = Math.max(min_y, edge.out_y)
@@ -693,14 +699,14 @@ function position_edges(ranking, params) {
     let active = []
     let max_height_level = 0
     let min_height_level = 0
-    for (let edge of edges) {
+    for (const edge of edges) {
       let x = edge.begin
       // TODO: We could keep the active list sorted to avoid checking all
       // edges for filtering...
       let local_max_height = 0
       let local_min_height = 0
       active = active.filter(active_edge => (active_edge.end >= x))
-      for (let active_edge of active) {
+      for (const active_edge of active) {
         local_min_height = Math.min(local_min_height, active_edge.height_level-1)
         local_max_height = Math.max(local_max_height, active_edge.height_level+1)
       }
@@ -714,7 +720,7 @@ function position_edges(ranking, params) {
 
     const height_level_range = max_height_level - min_height_level
     const level_spacing = (max_y - min_y) / (height_level_range + 2)
-    for (let edge of edges) {
+    for (const edge of edges) {
       const level_height = (edge.height_level+1-min_height_level)*level_spacing
       edge.half_height = min_y + level_height
     }
@@ -722,13 +728,13 @@ function position_edges(ranking, params) {
 }
 
 function draw_edges(ranking, params) {
-  for (let rank_nodes of ranking.ranks) {
-    for (let node of rank_nodes) {
+  for (const rank_nodes of ranking.ranks) {
+    for (const node of rank_nodes) {
       if (!node.element) {
         continue
       }
 
-      for (let edge of node.out_edges) {
+      for (const edge of node.out_edges) {
         const element = edge.element
         if (element === undefined || edge.out_x === undefined
           || edge.out_y === undefined || edge.half_height === undefined) {
@@ -767,13 +773,13 @@ function draw_edges(ranking, params) {
 }
 
 function draw_simple_edges(ranking) {
-  for (let rank_nodes of ranking.ranks) {
-    for (let node of rank_nodes) {
+  for (const rank_nodes of ranking.ranks) {
+    for (const node of rank_nodes) {
       if (!node.element) {
         continue
       }
 
-      for (let edge of node.out_edges) {
+      for (const edge of node.out_edges) {
         const element = edge.element
         console.assert(element)
         if (edge.source === undefined || edge.dest === undefined) {
@@ -789,11 +795,11 @@ function draw_simple_edges(ranking) {
 
 function add_debug_handlers(element, ranking, params) {
   if (params.debug_log_on_click) {
-    for (let node of ranking.nodelist) {
+    for (const node of ranking.nodelist) {
       const element = node.element
       if (!element)
         continue
-      for (let child of element.querySelectorAll('*')) {
+      for (const child of element.querySelectorAll('*')) {
         child.onclick = () => {
           console.log(element)
           console.log(`Id: ${node.id}`)
@@ -826,7 +832,7 @@ export function layout(element, params) {
     params.reduce_crossings = true
 
   const graph = make_graph(element)
-  rank(graph, params)
+  assign_ranks(graph, params)
   const ranking = minimize_crossings(graph, params)
 
   if (params.position_vertices) {
@@ -844,8 +850,8 @@ export function layout(element, params) {
   }
 
   if (params.debug_draw) {
-    for (let rank_nodes of ranking.ranks) {
-      for (let node of rank_nodes) {
+    for (const rank_nodes of ranking.ranks) {
+      for (const node of rank_nodes) {
         if (!node.element) {
           const circ = document.createElementNS(SVGNS, 'circle')
           circ.setAttribute('cx', node.x)

@@ -64,8 +64,7 @@ export function makeEllipse(node) {
 
 export function vlayout(node) {
   let y = 0;
-  for (let i = 0; i < node.children.length; i++) {
-    const child = node.children[i];
+  for (const child of node.children) {
     if (y != 0) {
       child.setAttribute('transform', `translate(0 ${y})`)
     }

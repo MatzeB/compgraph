@@ -36,7 +36,7 @@ export class Manipulator {
   }
 
   hideBoxes() {
-    for (let box of this.selection_boxes) {
+    for (const box of this.selection_boxes) {
       box.style.display = 'none'
     }
   }
