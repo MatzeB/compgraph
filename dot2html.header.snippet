@@ -1,10 +1,15 @@
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8"/>
     <style>
-      .back {
-        fill: #b2dfee;
-        stroke: none;
+      @property --shape {
+        syntax: "*";
+        inherits: false;
+      }
+      .shape {
+        fill: white;
+        stroke: black;
       }
       g text {
         text-anchor: middle;
@@ -13,6 +18,7 @@
         font-size: 12px;
         fill: black;
         text-anchor: start;
+        --shape: ellipse;
       }
       .edge {
         stroke: black;
@@ -30,6 +36,17 @@
         to {
           stroke-dashoffset: -20;
         }
+      }
+      #settings {
+          position: absolute;
+          top: 10px;
+          right: 25px;
+          width: 155px;
+          background: #e0e0e0;
+      }
+
+      .setting input[type=text] {
+          width: 40px;
       }
     </style>
   </head>

@@ -4,19 +4,17 @@ import sys
 
 def func_begin(out, name):
     out.write(f"\n<h2>{name}</h2>\n")
-    out.write("<svg class=\"fit_contents\">\n")
+    out.write("<svg class=\"graphdrawing resizeToBBox\">\n")
     out.write("<g class=\"layout\">\n")
 
 def func_end(out, nodes, edges, branches):
     for n in nodes:
         branch_insn = branches.get(n)
+        out.write(f"  <text id=\"{n}\">\n")
+        out.write(f"    <tspan x=\"0\" dy=\".6em\" class=\"label\">{n}:</tspan>\n")
         if branch_insn is not None:
-            out.write(f"  <g id=\"{n}\" class=\"vlayout\">\n")
-            out.write(f"    <text>{n}:</text>\n")
-            out.write(f"    <text>&nbsp;&nbsp;{branch_insn}</text>\n")
-            out.write(f"  </g>\n")
-        else:
-            out.write(f"  <text id=\"{n}\">{n}</text>\n")
+            out.write(f"    <tspan x=\"0\" dy=\"1.2em\" class=\"terminator\">&nbsp;&nbsp;{branch_insn}</span>\n")
+        out.write(f"  </text>\n")
     out.write("\n")
     for e in edges:
         out.write(f"  <path class=\"edge\" src=\"{e[0]}\" dst=\"{e[1]}\"/>\n")
@@ -81,7 +79,7 @@ def main():
     filename = sys.argv[1]
     out = sys.stdout
 
-    out.write(open("header.snippet", "r").read())
+    out.write(open("llvmcfg.header.snippet", "r").read())
 
     with open(filename) as fp:
         translate(out, fp)

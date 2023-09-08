@@ -1,0 +1,22 @@
+    <script type="module">
+      import { applyShape, resizeToBBox } from './drawing.mjs'
+      import { layout } from './layout.mjs'
+
+      document.querySelectorAll('svg.graphdrawing *').forEach(applyShape)
+      document.querySelectorAll('svg .layout').forEach(svg => {
+        layout(svg)
+      })
+      document.querySelectorAll('svg.resizeToBBox').forEach(resizeToBBox)
+
+      document.querySelectorAll('svg .edge').forEach(element => {
+        element.onmouseover = () => {
+          if (!element.classList.contains("mouseover_edge"))
+            element.classList.add("mouseover_edge")
+        }
+        element.onmouseout = () => {
+          element.classList.remove("mouseover_edge")
+        }
+      })
+    </script>
+  </body>
+</html>

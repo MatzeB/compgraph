@@ -28,7 +28,7 @@ def ident(keywords, scanner, value):
 
 keywords = set(["digraph", "size", "rankdir", "label"])
 rules = [
-    (r'[a-zA-Z_][a-zA-Z0-9_]*', lambda s, v: ident(keywords, s, v)),
+    (r'[a-zA-Z0-9_]+', lambda s, v: ident(keywords, s, v)),
     (r'->', token),
     (r'/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/', skip),
     (r'\s+', skip),
@@ -170,17 +170,15 @@ def parse_file(string):
     next()
     return parse_top()
 
-#for t in scan(rules, sys.stdin.read()):
-#    print(f"{t.kind} {t.value}")
-
 def write_svg(out):
-    out.write(open("header.snippet", "r").read())
+    out.write(open("dot2html.header.snippet", "r").read())
 
     idx = 0
     for v in vertices.values():
         v.id = f"v{idx}"
         idx += 1
 
+    out.write('<svg class="graphdrawing resizeToBBox">\n')
     out.write('<g class="layout">\n')
     for v in vertices.values():
         out.write(f'  <text id="{v.id}">{v.label}</text>\n')
@@ -188,7 +186,16 @@ def write_svg(out):
     for e in edges:
         out.write(f'  <path class="edge" src="{e.src.id}" dst="{e.dst.id}"/>\n')
     out.write('</g>\n')
-    out.write(open("footer.snippet", "r").read())
+    out.write('</svg>\n')
 
-parse_file(sys.stdin.read())
-write_svg(sys.stdout)
+    out.write(open("knobs.snippet", "r").read())
+    out.write(open("dot2html.footer.snippet", "r").read())
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        with open(sys.argv[1]) as fp:
+            contents = fp.read()
+    else:
+        contents = sys.stdin.read()
+    parse_file(contents)
+    write_svg(sys.stdout)

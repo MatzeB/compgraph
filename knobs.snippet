@@ -1,0 +1,59 @@
+    <div id="settings">
+      <div class="setting">
+        <label for="debug_draw">Draw Pseudo Nodes</label>
+        <input type="checkbox" id="debug_draw"/>
+      </div>
+      <div class="setting">
+        <label for="--layout-nodesep">--layout-nodesep</label>
+        <input type="text" id="--layout-nodesep" value="15"/>
+      </div>
+      <div class="setting">
+        <label for="--layout-ranksep">--layout-ranksep</label>
+        <input type="text" id="--layout-ranksep" value="35"/>
+      </div>
+      <div class="setting">
+        <label for="reduce_crossings">Reduce Crossings</label>
+        <input type="checkbox" id="reduce_crossings" checked="true"/>
+      </div>
+      <div class="setting">
+        <label for="optimize_ranking">Optimize Ranking</label>
+        <input type="checkbox" id="optimize_ranking" checked="true"/>
+      </div>
+      <div class="setting">
+        <label for="position_vertices">Position Vertices</label>
+        <input type="checkbox" id="position_vertices" checked="true"/>
+      </div>
+      <div class="setting">
+        <label for="position_edges">Position Edges</label>
+        <input type="checkbox" id="position_edges" checked="true"/>
+      </div>
+
+
+      <button type="button" id="button_layout">Layout</button>
+    </div>
+    <script type="module">
+      import { layout } from './layout.mjs'
+      import { resizeToBBox } from './drawing.mjs'
+      document.querySelector('#button_layout').addEventListener('click', ()=>{
+        document.querySelectorAll('svg .layout').forEach(svg => {
+          let debug_draw
+          if (document.querySelector('#debug_draw').checked) {
+            debug_draw = svg
+          } else {
+            debug_draw = false
+          }
+          svg.style.setProperty("--layout-nodesep", document.querySelector('#--layout-nodesep').value)
+          svg.style.setProperty("--layout-ranksep", document.querySelector('#--layout-ranksep').value)
+          let params = {
+            debug_draw: debug_draw,
+            debug_log_on_click: true,
+            position_vertices: document.querySelector('#position_vertices').checked,
+            position_edges: document.querySelector('#position_edges').checked,
+            optimize_ranking: document.querySelector('#optimize_ranking').checked,
+            reduce_crossings: document.querySelector('#reduce_crossings').checked,
+          }
+          layout(svg, params)
+        })
+        document.querySelectorAll('svg.resizeToBBox').forEach(resizeToBBox)
+      })
+    </script>

@@ -14,7 +14,6 @@ export function makeBox(node) {
       rect.setAttribute(attrib.name, attrib.value)
     }
   }
-  g.classList.add("vertex")
   node.replaceWith(g)
   g.appendChild(node)
 
@@ -24,7 +23,7 @@ export function makeBox(node) {
   const i_bottom = 5
 
   const bbox = g.getBBox()
-  rect.setAttribute('class', 'back')
+  rect.setAttribute('class', 'shape-box shape')
   rect.setAttribute('x', bbox.x - i_left)
   rect.setAttribute('y', bbox.y - i_top)
   rect.setAttribute('width', bbox.width + i_left + i_right)
@@ -55,11 +54,25 @@ export function makeEllipse(node) {
   const inv_sqr2 = 1 / Math.sqrt(2)
   const rx = bbox.width * inv_sqr2 + add_rx
   const ry = bbox.height * inv_sqr2 + add_ry
-  ellipse.setAttribute('class', 'back')
+  ellipse.setAttribute('class', 'shape-ellipse shape')
   ellipse.setAttribute('cx', bbox.x + (bbox.width / 2))
   ellipse.setAttribute('cy', bbox.y + (bbox.height / 2))
   ellipse.setAttribute('rx', rx)
   ellipse.setAttribute('ry', ry)
+}
+
+export function applyShape(node) {
+  const shape = getComputedStyle(node).getPropertyValue("--shape")
+  if (shape == "") {
+    return;
+  } else if (shape == "box") {
+    makeBox(node)
+  } else if (shape == "ellipse") {
+    makeEllipse(node)
+  } else if (shape == "none") {
+  } else {
+    console.log(`Unsupport/unknown shape ${shape}`, node)
+  }
 }
 
 export function vlayout(node) {
@@ -73,7 +86,7 @@ export function vlayout(node) {
   }
 }
 
-export function fit_contents(node) {
+export function resizeToBBox(node) {
   console.assert(node.nodeName == "svg")
   const bbox = node.getBBox()
   node.setAttribute("width", bbox.width)
@@ -81,4 +94,4 @@ export function fit_contents(node) {
   node.setAttribute("viewBox", `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`)
 }
 
-export default { makeBox, makeEllipse, vlayout, fit_contents }
+export default { makeBox, makeEllipse, applyShape, vlayout, resizeToBBox }

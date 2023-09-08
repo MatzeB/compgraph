@@ -1,15 +1,15 @@
     <script type="module">
-      import { makeBox, fit_contents, vlayout } from './drawing.mjs'
+      import { applyShape, resizeToBBox, vlayout } from './drawing.mjs'
       import { layout } from './layout.mjs'
       //import { Manipulator } from './manipulator.mjs'
         
       document.querySelectorAll('svg .layout .vlayout').forEach(vlayout)
-      document.querySelectorAll('svg .layout > g, svg .layout > text').forEach(makeBox)
+      document.querySelectorAll('svg.graphdrawing *').forEach(applyShape)
       document.querySelectorAll('svg .layout').forEach(svg => {
         layout(svg)
         //new Manipulator(svg)
       })
-      document.querySelectorAll('svg.fit_contents').forEach(fit_contents)
+      document.querySelectorAll('svg.resizeToBBox').forEach(resizeToBBox)
     </script>
   </body>
 </html>

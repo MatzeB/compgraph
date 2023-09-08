@@ -1,5 +1,8 @@
 /* This is the core layout algorithm. Written by reading the paper about
- * graphviz/dot layouts: https://graphviz.org/documentation/TSE93.pdf
+ * graphviz/dot layouts: 
+ * "A Technique for Drawing Directed Graphs", E. Gansner; E. Koutsofios;
+ * S. North; K. Vo
+ * https://graphviz.org/documentation/TSE93.pdf
  *
  * TODO: We're not really implementing the DOT algorithm, but instead skimp and 
  * take shortcuts all over the place. For example there is no simplex solver
@@ -20,6 +23,7 @@ class Edge {
     this.source = source
     this.dest = dest
     this.out_idx = out_idx
+    this.reversed_backedge = false
   }
 }
 
@@ -29,6 +33,7 @@ class Vertex {
     this.bbox = bbox
     this.out_edges = []
     this.in_edges = []
+    this.self_edges = []
   }
 }
 
@@ -84,6 +89,9 @@ function make_graph(element) {
     const dst_node = vertices.get(dst)
 
     const edge = new Edge(child, src_node, dst_node, src_node.out_edges.length)
+    if (src_node === dst_node) {
+      src_node.self_edges.push(edge)
+    }
     src_node.out_edges.push(edge)
     dst_node.in_edges.push(edge)
   }
@@ -156,7 +164,6 @@ function compute_node_heights(graph) {
   // we use `height >= 0` to mark already visited nodes that should not
   // change their heights anymore.
   const reverse_post_order = post_order(roots).reverse()
-  console.log("rpo", reverse_post_order)
   for (const node of reverse_post_order) {
     console.assert(node.height !== undefined)
     node.height = -node.height
@@ -190,10 +197,6 @@ function compute_node_depths(graph) {
   }
 }
 
-function is_backedge(edge) {
-  return edge.source.rank >= edge.dest.rank
-}
-
 function assign_ranks(graph, params) {
   const roots = graph.roots
   if (roots.length == 0)
@@ -212,60 +215,57 @@ function assign_ranks(graph, params) {
     node.rank = node.height
   }
 
+  // Determine backedges and reverse internally
+  const all_edges = []
+  for (const node of nodes) {
+    for (const edge of node.out_edges) {
+      all_edges.push(edge)
+    }
+  }
+  for (const edge of all_edges) {
+    if (edge.source.rank > edge.dest.rank) {
+      const old_dest = edge.dest
+      const old_source = edge.source
+      old_source.out_edges.splice(old_source.out_edges.findIndex((e) => e === edge), 1)
+      old_dest.in_edges.splice(old_dest.in_edges.findIndex((e) => e === edge), 1)
+      edge.dest = old_source
+      edge.source = old_dest
+      edge.reversed_backedge = true
+      edge.source.out_edges.push(edge)
+      edge.dest.in_edges.push(edge)
+    }
+  }
+
   if (params.optimize_ranking) {
     // Sink nodes with fewer incomding than outgoing edges downwards as much as
     // possible.
     const reverse_post_order_ins = post_order_ins(graph.leaves).reverse()
     for (const node of reverse_post_order_ins) {
-      let in_length = 0
-      for (const edge of node.in_edges) {
-        if (!is_backedge(edge))
-          in_length++
-      }
-      let out_length = 0
-      for (const edge of node.out_edges) {
-        if (!is_backedge(edge))
-          out_length++
-      }
-
+      const in_length = node.in_edges.length
+      const out_length = node.out_edges.length
       if (in_length < out_length) {
-        let max_rank = rank_max
+        let node_rank_min = rank_max
         for (const edge of node.out_edges) {
-          if (is_backedge(edge))
-            continue
           const succ = edge.dest
-          max_rank = Math.min(max_rank, succ.rank - 1)
+          node_rank_min = Math.min(node_rank_min, succ.rank - 1)
         }
-        node.rank = max_rank
+        node.rank = node_rank_min
       }
     }
 
     // Average rank between min/max for nodes with same amount of incoming and
     // outgoing edges.
     for (const node of reverse_post_order_ins) {
-      let in_length = 0
-      for (const edge of node.in_edges) {
-        if (!is_backedge(edge))
-          in_length++
-      }
-      let out_length = 0
-      for (const edge of node.out_edges) {
-        if (!is_backedge(edge))
-          out_length++
-      }
-
+      const in_length = node.in_edges.length
+      const out_length = node.out_edges.length
       if (in_length == out_length) {
         let min_rank = 0
         for (const edge of node.in_edges) {
-          if (is_backedge(edge))
-            continue
           const pred = edge.source
           min_rank = Math.max(min_rank, pred.rank + 1)
         }
         let max_rank = rank_max
         for (const edge of node.out_edges) {
-          if (is_backedge(edge))
-            continue
           const succ = edge.dest
           max_rank = Math.min(max_rank, succ.rank - 1)
         }
@@ -481,8 +481,8 @@ function minimize_crossings(graph, params) {
 }
 
 function initial_placement(ranking, params) {
-  const spacing_x = params.spacing_x
-  const spacing_y = params.spacing_y
+  const ranksep = params.ranksep
+  const nodesep = params.nodesep
 
   let y = 0
   for (const rank_nodes of ranking.ranks) {
@@ -491,7 +491,7 @@ function initial_placement(ranking, params) {
     let max_y = 0
     for (const node of rank_nodes) {
       if (x > 0) {
-        x += spacing_x
+        x += nodesep
       }
       node.x = x
       x += node.bbox.width
@@ -500,7 +500,7 @@ function initial_placement(ranking, params) {
       max_y = Math.max(max_y, node.bbox.y + node.bbox.height)
     }
 
-    y += spacing_y
+    y += ranksep
     y += -min_y
 
     for (const node of rank_nodes) {
@@ -521,7 +521,7 @@ function median(arr) {
 }
 
 function cycle_up(ranking, params) {
-  const spacing_x = params.spacing_x
+  const nodesep = params.nodesep
 
   for (let rank = ranking.rank_max - 1; rank >= 0; rank--) {
     const rank_nodes = ranking.ranks[rank]
@@ -551,7 +551,7 @@ function cycle_up(ranking, params) {
       if (last_node) {
         const bbox = last_node.bbox
         const last_right = last_node.x + bbox.x + bbox.width
-        const min_x = last_right + spacing_x - node.bbox.x
+        const min_x = last_right + nodesep - node.bbox.x
         x = Math.max(min_x, x)
       }
       node.x = x
@@ -562,7 +562,7 @@ function cycle_up(ranking, params) {
 
 function cycle_down(ranking, params) {
   const rank_max = ranking.rank_max
-  const spacing_x = params.spacing_x
+  const nodesep = params.nodesep
 
   for (let rank = 1; rank <= rank_max; rank++) {
     const rank_nodes = ranking.ranks[rank]
@@ -592,7 +592,7 @@ function cycle_down(ranking, params) {
       if (last_node) {
         const bbox = last_node.bbox
         const last_right = last_node.x + bbox.x + bbox.width
-        const min_x = last_right + spacing_x - node.bbox.x
+        const min_x = last_right + nodesep - node.bbox.x
         x = Math.max(min_x, x)
       }
       node.x = x
@@ -738,7 +738,11 @@ function draw_edges(ranking, params) {
         const element = edge.element
         if (element === undefined || edge.out_x === undefined
           || edge.out_y === undefined || edge.half_height === undefined) {
-          console.log(`invalid edge`, edge)
+          console.log("invalid edge", edge)
+          continue
+        }
+        if (edge.reversed_backedge) {
+          console.log("TODO: backedge", edge)
           continue
         }
 
@@ -794,20 +798,14 @@ function draw_simple_edges(ranking) {
 }
 
 function add_debug_handlers(element, ranking, params) {
-  if (params.debug_log_on_click) {
-    for (const node of ranking.nodelist) {
-      const element = node.element
-      if (!element)
-        continue
-      for (const child of element.querySelectorAll('*')) {
-        child.onclick = () => {
-          console.log(element)
-          console.log(`Id: ${node.id}`)
-          console.log(`Rank: ${node.rank}`)
-          console.log(`Height: ${node.height}`)
-          console.log(`Depth: ${node.depth}`)
-          console.log(`Order Idx: ${node.order_idx}`)
-        }
+  for (const node of ranking.nodelist) {
+    const element = node.element
+    if (!element)
+      continue
+    for (const child of element.querySelectorAll('*')) {
+      child.onclick = () => {
+        console.log("element", element)
+        console.log("node", node)
       }
     }
   }
@@ -816,12 +814,17 @@ function add_debug_handlers(element, ranking, params) {
 export function layout(element, params) {
   if (params === undefined)
     params = {}
-  if (params.spacing_x === undefined)
-    params.spacing_x = 15
-  if (params.spacing_y === undefined)
-    params.spacing_y = 20
+  const style = getComputedStyle(element)
+  params.ranksep = style.getPropertyValue("--layout-ranksep")
+  if (params.ranksep == "")
+    params.ranksep = "15"
+  params.ranksep = Number(params.ranksep)
+  params.nodesep = style.getPropertyValue("--layout-nodesep")
+  if (params.nodesep == "")
+    params.nodesep = "20"
+  params.nodesep = Number(params.nodesep)
   if (params.debug_log_on_click === undefined)
-    params.debug_log_on_click = true
+    params.debug_log_on_click = false
   if (params.optimize_ranking === undefined)
     params.optimize_ranking = true
   if (params.position_vertices === undefined)
@@ -864,7 +867,9 @@ export function layout(element, params) {
     }
   }
 
-  //add_debug_handlers(element, ranking, params)
+  if (params.debug_log_on_click) {
+    add_debug_handlers(element, ranking, params)
+  }
 }
 
 export default { layout }

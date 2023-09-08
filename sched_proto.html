@@ -1,7 +1,55 @@
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8"/>
-    <link rel="stylesheet" href="graph_sched.css">
+    <style>
+      .shape-box {
+        fill: hsl(0,0%,80%);
+        stroke: none;
+        rx: 15;
+      }
+      g.layout {
+        --layout-nodesep: 20;
+        --layout-ranksep: 40;
+      }
+      g text {
+        text-anchor: middle;
+        alignment-baseline: middle;
+        font-family: Verdana, Arial, sans-serif;
+        font-size: 16px;
+        padding: 12px;
+        --shape: box;
+      }
+      .edge {
+        stroke: black;
+        marker-end: url(#arrow);
+        fill: none;
+      }
+      .mouseover_edge {
+        stroke: red;
+        stroke-width: 2;
+        stroke-dasharray: 10;
+        animation: dash 1s linear;
+        animation-iteration-count: infinite;
+      }
+      @keyframes dash {
+        to {
+          stroke-dashoffset: -20;
+        }
+      }
+      .hidden {
+        visibility: hidden;
+      }
+      .info {
+        width: 350px;
+        height: 190px;
+      }
+      div.infobox {
+        font-family: Verdana, Arial, sans-serif;
+        padding: 12px;
+        background: hsl(27, 90%, 80%);
+      }
+    </style>
   </head>
   <body>
     <!-- imported layout.svg here (is there a better way?) -->
@@ -15,7 +63,7 @@
       </defs>
     </svg>
 
-    <svg width="1000" height="700" viewBox="-100 0 1500 700" id="canvas">
+    <svg width="1000" height="700" viewBox="-100 0 1500 700" class="graphdrawing">
 <g class="layout">
   <text id="v0"> COPY</text>
   <text id="v1"> MOV64rm</text>
@@ -103,10 +151,10 @@
     </svg>
 
     <script type="module">
-      import { makeBox } from './drawing.mjs';
+      import { applyShape } from './drawing.mjs';
       import { layout } from './layout.mjs';
 
-      document.querySelectorAll('svg .layout text').forEach(makeBox);
+      document.querySelectorAll('svg.graphdrawing *').forEach(applyShape)
       document.querySelectorAll('svg .layout').forEach(svg => {
         layout(svg);
       });
@@ -123,12 +171,13 @@
 
       document.querySelectorAll('svg').forEach(svg => {
         svg.addEventListener('click', (event) => {
-          console.log(`Clicked on:`)
+          console.log("Clicked on:", event.target)
           let target = event.target
-          while (target != null && !target.classList.contains("vertex")) {
+          while (target != null && target.getAttribute("id") === null) {
             target = target.parentElement
           }
           if (target != null) {
+            console.log("checking", target)
             document.querySelectorAll(`#${target.id}-info`).forEach(info => {
               if (info.classList.contains("hidden")) {
                 info.classList.remove("hidden");
@@ -150,7 +199,6 @@
               //info.setAttribute("x", point.x)
               //info.setAttribute("y", point.y)
             });
-            console.log(target)
           }
         });
       });
